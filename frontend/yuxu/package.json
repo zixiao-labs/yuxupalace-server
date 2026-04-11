@@ -15,7 +15,8 @@
     "@mui/material": "^9.0.0",
     "chen-the-dawnstreak": "^4.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-router": "^7.14.0"
   },
   "devDependencies": {
     "@nasti-toolchain/nasti": ">=1.0.0",

@@ -15,7 +15,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import MergeIcon from '@mui/icons-material/MergeType';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutlined';
 import ThumbUpAltOutlinedIcon from '@mui/icons-material/ThumbUpAltOutlined';
 
 interface MR {
@@ -170,7 +170,7 @@ export default function MergeRequests() {
 
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-                  <Typography variant="body2" fontWeight={600} sx={{ '&:hover': { color: 'primary.light' } }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, '&:hover': { color: 'primary.light' } }}>
                     {mr.title}
                   </Typography>
                   {mr.labels.map((l) => (

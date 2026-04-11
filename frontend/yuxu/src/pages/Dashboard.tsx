@@ -108,7 +108,7 @@ export default function Dashboard() {
         <Grid size={{ xs: 12, lg: 6 }}>
           <Paper sx={{ p: 0 }}>
             <Box sx={{ px: 2.5, py: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="subtitle1" fontWeight={600}>最近仓库</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>最近仓库</Typography>
               <Typography
                 component={Link}
                 to="/repos"
@@ -132,8 +132,10 @@ export default function Dashboard() {
                   <ListItemText
                     primary={repo.name}
                     secondary={repo.desc}
-                    primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
-                    secondaryTypographyProps={{ fontSize: 12 }}
+                    slotProps={{
+                      primary: { sx: { fontSize: 14, fontWeight: 500 } },
+                      secondary: { sx: { fontSize: 12 } },
+                    }}
                   />
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -152,7 +154,7 @@ export default function Dashboard() {
         <Grid size={{ xs: 12, lg: 6 }}>
           <Paper sx={{ p: 0 }}>
             <Box sx={{ px: 2.5, py: 2, borderBottom: 1, borderColor: 'divider' }}>
-              <Typography variant="subtitle1" fontWeight={600}>最近动态</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>最近动态</Typography>
             </Box>
             <List disablePadding>
               {recentActivity.map((item, i) => (
@@ -172,7 +174,7 @@ export default function Dashboard() {
                       </Typography>
                     }
                     secondary={`${item.repo} · ${item.time}`}
-                    secondaryTypographyProps={{ fontSize: 12 }}
+                    slotProps={{ secondary: { sx: { fontSize: 12 } } }}
                   />
                 </ListItemButton>
               ))}
@@ -184,7 +186,7 @@ export default function Dashboard() {
         <Grid size={12}>
           <Paper sx={{ p: 0 }}>
             <Box sx={{ px: 2.5, py: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="subtitle1" fontWeight={600}>流水线</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>流水线</Typography>
               <Typography
                 component={Link}
                 to="/ci"
@@ -210,7 +212,7 @@ export default function Dashboard() {
               >
                 {statusIcon[p.status]}
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" fontWeight={500}>{p.repo}</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{p.repo}</Typography>
                   <Typography variant="caption" color="text.secondary">{p.branch}</Typography>
                 </Box>
                 <Chip

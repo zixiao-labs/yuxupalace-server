@@ -8,14 +8,13 @@ import InputAdornment from '@mui/material/InputAdornment';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Chip from '@mui/material/Chip';
-import Avatar from '@mui/material/Avatar';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import CircleIcon from '@mui/icons-material/Circle';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutlined';
 
 interface Issue {
   id: number;
@@ -156,7 +155,7 @@ export default function Issues() {
 
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                  <Typography variant="body2" fontWeight={600} sx={{ '&:hover': { color: 'primary.light' } }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, '&:hover': { color: 'primary.light' } }}>
                     {issue.title}
                   </Typography>
                   {issue.labels.map((l) => (

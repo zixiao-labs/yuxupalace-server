@@ -88,7 +88,7 @@ export default function RepositoryDetail() {
         >
           {owner}
         </Typography>
-        <Typography variant="body2" color="text.primary" fontWeight={600}>
+        <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 600 }}>
           {name}
         </Typography>
       </Breadcrumbs>
@@ -161,7 +161,7 @@ export default function RepositoryDetail() {
           {/* Last commit info */}
           <Paper variant="outlined" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.25, mb: 0 , borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}>
             <Avatar sx={{ width: 22, height: 22, fontSize: 10, bgcolor: 'primary.main' }}>A</Avatar>
-            <Typography variant="body2" fontWeight={500} sx={{ fontSize: 13 }}>Amiya167</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 500, fontSize: 13 }}>Amiya167</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ fontSize: 13, flex: 1 }}>
               重构路由模块
             </Typography>
@@ -215,7 +215,7 @@ export default function RepositoryDetail() {
           <Paper variant="outlined" sx={{ mt: 2.5, overflow: 'hidden' }}>
             <Box sx={{ px: 2.5, py: 1.5, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
               <InsertDriveFileIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-              <Typography variant="body2" fontWeight={500} sx={{ fontSize: 13 }}>README.md</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 500, fontSize: 13 }}>README.md</Typography>
             </Box>
             <Box sx={{ p: 2.5 }}>
               <Typography

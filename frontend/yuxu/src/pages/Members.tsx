@@ -54,7 +54,7 @@ export default function Members() {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <Avatar sx={{ width: 32, height: 32, fontSize: 14, bgcolor: m.color }}>{m.avatar}</Avatar>
                     <Box>
-                      <Typography variant="body2" fontWeight={500}>{m.name}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>{m.name}</Typography>
                       <Typography variant="caption" color="text.secondary">{m.email}</Typography>
                     </Box>
                   </Box>

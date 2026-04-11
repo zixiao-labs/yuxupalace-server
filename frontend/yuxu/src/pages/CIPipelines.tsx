@@ -169,7 +169,7 @@ export default function CIPipelines() {
                   <TableCell>
                     <Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
-                        <Typography variant="body2" fontWeight={500} sx={{ fontSize: 13 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, fontSize: 13 }}>
                           #{p.id}
                         </Typography>
                         <Chip label={p.branch} size="small" variant="outlined" sx={{ height: 18, fontSize: 10, fontFamily: 'monospace' }} />

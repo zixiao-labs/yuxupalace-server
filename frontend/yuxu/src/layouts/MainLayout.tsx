@@ -93,7 +93,7 @@ export default function MainLayout() {
             </ListItemIcon>
             <ListItemText
               primary={item.label}
-              primaryTypographyProps={{ fontSize: 14 }}
+              slotProps={{ primary: { sx: { fontSize: 14 } } }}
             />
           </ListItemButton>
         ))}
@@ -130,7 +130,7 @@ export default function MainLayout() {
             </ListItemIcon>
             <ListItemText
               primary={item.label}
-              primaryTypographyProps={{ fontSize: 14 }}
+              slotProps={{ primary: { sx: { fontSize: 14 } } }}
             />
           </ListItemButton>
         ))}
