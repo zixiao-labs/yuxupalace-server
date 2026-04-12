@@ -69,8 +69,16 @@ pub struct ErrorResponse {
 
 impl From<&AppError> for ErrorResponse {
     fn from(err: &AppError) -> Self {
+        let error = match err {
+            // For internal/server errors, return a generic message to avoid leaking details
+            AppError::Internal(_) | AppError::Database(_) | AppError::Git(_) => {
+                "Internal server error".to_string()
+            }
+            // For client errors, return the actual error message
+            _ => err.to_string(),
+        };
         ErrorResponse {
-            error: err.to_string(),
+            error,
             code: err.error_code().to_string(),
         }
     }

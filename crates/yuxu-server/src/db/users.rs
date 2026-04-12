@@ -9,6 +9,7 @@ pub struct UserRow {
     pub username: String,
     pub email: String,
     pub display_name: String,
+    #[serde(skip_serializing)]
     pub password_hash: String,
     pub avatar_url: Option<String>,
     pub bio: Option<String>,
@@ -76,16 +77,32 @@ pub async fn find_by_username_or_email(
     pool: &PgPool,
     identifier: &str,
 ) -> Result<Option<UserRow>> {
-    let row = sqlx::query_as::<_, UserRow>(
-        r#"
-        SELECT id, username, email, display_name, password_hash, avatar_url, bio, is_admin, created_at, updated_at
-        FROM users
-        WHERE username = $1 OR email = $1
-        "#,
-    )
-    .bind(identifier)
-    .fetch_optional(pool)
-    .await?;
+    // Detect if identifier looks like an email (contains '@')
+    let row = if identifier.contains('@') {
+        // Query by email only
+        sqlx::query_as::<_, UserRow>(
+            r#"
+            SELECT id, username, email, display_name, password_hash, avatar_url, bio, is_admin, created_at, updated_at
+            FROM users
+            WHERE email = $1
+            "#,
+        )
+        .bind(identifier)
+        .fetch_optional(pool)
+        .await?
+    } else {
+        // Query by username only
+        sqlx::query_as::<_, UserRow>(
+            r#"
+            SELECT id, username, email, display_name, password_hash, avatar_url, bio, is_admin, created_at, updated_at
+            FROM users
+            WHERE username = $1
+            "#,
+        )
+        .bind(identifier)
+        .fetch_optional(pool)
+        .await?
+    };
 
     Ok(row)
 }

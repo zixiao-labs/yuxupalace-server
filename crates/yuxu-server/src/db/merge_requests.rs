@@ -54,60 +54,80 @@ pub async fn create(
     reviewer_ids: &[Uuid],
     label_ids: &[Uuid],
 ) -> Result<MrRow> {
-    let mut tx = pool.begin().await?;
+    // Retry up to 3 times to handle race conditions in number allocation
+    const MAX_RETRIES: u32 = 3;
+    let mut retry_count = 0;
 
-    let mr = sqlx::query_as::<_, MrRow>(
-        r#"
-        INSERT INTO merge_requests (id, repo_id, number, title, body, state, source_branch, target_branch, author_id, created_at, updated_at)
-        VALUES (
-            $1, $2,
-            COALESCE((SELECT MAX(number) FROM merge_requests WHERE repo_id = $2), 0) + 1,
-            $3, $4, 'open', $5, $6, $7, NOW(), NOW()
-        )
-        RETURNING id, repo_id, number, title, body, state, source_branch, target_branch, author_id, merged_by, merged_at, ci_status, created_at, updated_at
-        "#,
-    )
-    .bind(Uuid::new_v4())
-    .bind(repo_id)
-    .bind(title)
-    .bind(body)
-    .bind(source_branch)
-    .bind(target_branch)
-    .bind(author_id)
-    .fetch_one(&mut *tx)
-    .await?;
+    loop {
+        let mut tx = pool.begin().await?;
 
-    for reviewer_id in reviewer_ids {
-        sqlx::query(
+        let result = sqlx::query_as::<_, MrRow>(
             r#"
-            INSERT INTO mr_reviewers (mr_id, user_id)
-            VALUES ($1, $2)
-            ON CONFLICT DO NOTHING
+            INSERT INTO merge_requests (id, repo_id, number, title, body, state, source_branch, target_branch, author_id, created_at, updated_at)
+            VALUES (
+                $1, $2,
+                COALESCE((SELECT MAX(number) FROM merge_requests WHERE repo_id = $2), 0) + 1,
+                $3, $4, 'open', $5, $6, $7, NOW(), NOW()
+            )
+            RETURNING id, repo_id, number, title, body, state, source_branch, target_branch, author_id, merged_by, merged_at, ci_status, created_at, updated_at
             "#,
         )
-        .bind(mr.id)
-        .bind(reviewer_id)
-        .execute(&mut *tx)
-        .await?;
+        .bind(Uuid::new_v4())
+        .bind(repo_id)
+        .bind(title)
+        .bind(body)
+        .bind(source_branch)
+        .bind(target_branch)
+        .bind(author_id)
+        .fetch_one(&mut *tx)
+        .await;
+
+        let mr = match result {
+            Ok(mr) => mr,
+            Err(e) => {
+                // Check for unique constraint violation (SQLSTATE 23505)
+                if let Some(db_err) = e.as_database_error() {
+                    if db_err.code().as_deref() == Some("23505") && retry_count < MAX_RETRIES {
+                        retry_count += 1;
+                        continue;
+                    }
+                }
+                return Err(e.into());
+            }
+        };
+
+        for reviewer_id in reviewer_ids {
+            sqlx::query(
+                r#"
+                INSERT INTO mr_reviewers (mr_id, user_id)
+                VALUES ($1, $2)
+                ON CONFLICT DO NOTHING
+                "#,
+            )
+            .bind(mr.id)
+            .bind(reviewer_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        for label_id in label_ids {
+            sqlx::query(
+                r#"
+                INSERT INTO mr_labels (mr_id, label_id)
+                VALUES ($1, $2)
+                ON CONFLICT DO NOTHING
+                "#,
+            )
+            .bind(mr.id)
+            .bind(label_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+
+        return Ok(mr);
     }
-
-    for label_id in label_ids {
-        sqlx::query(
-            r#"
-            INSERT INTO mr_labels (mr_id, label_id)
-            VALUES ($1, $2)
-            ON CONFLICT DO NOTHING
-            "#,
-        )
-        .bind(mr.id)
-        .bind(label_id)
-        .execute(&mut *tx)
-        .await?;
-    }
-
-    tx.commit().await?;
-
-    Ok(mr)
 }
 
 pub async fn find_by_number(
@@ -179,6 +199,13 @@ pub async fn update(
     body: Option<&str>,
     state: Option<&str>,
 ) -> Result<MrRow> {
+    // Validate that state is not being set to 'merged' - callers should use set_merged() instead
+    if state == Some("merged") {
+        return Err(anyhow::anyhow!(
+            "cannot set state to 'merged' via update(); use set_merged() instead"
+        ));
+    }
+
     let row = sqlx::query_as::<_, MrRow>(
         r#"
         UPDATE merge_requests
@@ -221,7 +248,7 @@ pub async fn set_merged(pool: &PgPool, id: Uuid, merged_by: Uuid) -> Result<MrRo
 }
 
 pub async fn update_ci_status(pool: &PgPool, id: Uuid, status: &str) -> Result<()> {
-    sqlx::query(
+    let result = sqlx::query(
         r#"
         UPDATE merge_requests
         SET ci_status = $2, updated_at = NOW()
@@ -232,6 +259,10 @@ pub async fn update_ci_status(pool: &PgPool, id: Uuid, status: &str) -> Result<(
     .bind(status)
     .execute(pool)
     .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(anyhow::anyhow!("merge request not found"));
+    }
 
     Ok(())
 }

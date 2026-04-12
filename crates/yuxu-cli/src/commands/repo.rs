@@ -18,6 +18,15 @@ fn split_repo(repo: &str) -> Result<(&str, &str)> {
     let mut parts = repo.splitn(2, '/');
     let owner = parts.next().ok_or_else(|| anyhow::anyhow!("expected owner/name"))?;
     let name = parts.next().ok_or_else(|| anyhow::anyhow!("expected owner/name"))?;
+
+    if owner.is_empty() || name.is_empty() {
+        return Err(anyhow::anyhow!("owner and name must be non-empty"));
+    }
+
+    if name.contains('/') {
+        return Err(anyhow::anyhow!("expected exactly one '/' in repo string"));
+    }
+
     Ok((owner, name))
 }
 

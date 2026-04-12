@@ -10,12 +10,18 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_env() -> Self {
-        Config {
+    pub fn from_env() -> anyhow::Result<Self> {
+        let jwt_secret = std::env::var("JWT_SECRET")
+            .map_err(|_| anyhow::anyhow!("JWT_SECRET environment variable is required"))?;
+
+        if jwt_secret.is_empty() {
+            return Err(anyhow::anyhow!("JWT_SECRET cannot be empty"));
+        }
+
+        Ok(Config {
             database_url: std::env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/yuxu".into()),
-            jwt_secret: std::env::var("JWT_SECRET")
-                .unwrap_or_else(|_| "yuxu-dev-secret-change-in-production".into()),
+            jwt_secret,
             git_root: PathBuf::from(
                 std::env::var("GIT_ROOT").unwrap_or_else(|_| "/tmp/yuxu-repos".into()),
             ),
@@ -24,7 +30,7 @@ impl Config {
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(3000),
-        }
+        })
     }
 
     pub fn listen_addr(&self) -> String {

@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let config = Config::from_env();
+    let config = Config::from_env()?;
     tracing::info!("Starting YuXu DevOps server");
 
     // Ensure git root directory exists

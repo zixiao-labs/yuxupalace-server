@@ -12,6 +12,7 @@ pub struct RepoRow {
     pub description: Option<String>,
     pub is_private: bool,
     pub default_branch: String,
+    #[serde(skip_serializing)]
     pub disk_path: String,
     pub stars_count: i32,
     pub forks_count: i32,

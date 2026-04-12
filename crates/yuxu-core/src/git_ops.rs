@@ -85,11 +85,19 @@ pub fn init_bare_repo(path: &Path) -> Result<Repository, AppError> {
 
 pub fn open_repo(path: &Path) -> Result<Repository, AppError> {
     Repository::open_bare(path).map_err(|e| {
-        AppError::NotFound(format!(
-            "repository not found at {}: {}",
-            path.display(),
-            e
-        ))
+        if e.code() == git2::ErrorCode::NotFound {
+            AppError::NotFound(format!(
+                "repository not found at {}: {}",
+                path.display(),
+                e
+            ))
+        } else {
+            AppError::Internal(anyhow::anyhow!(
+                "failed to open repository at {}: {}",
+                path.display(),
+                e
+            ))
+        }
     })
 }
 
@@ -300,6 +308,13 @@ pub fn merge_branches(
     committer_name: &str,
     committer_email: &str,
 ) -> Result<String, AppError> {
+    // Rebase is not implemented
+    if matches!(strategy, MergeStrategy::Rebase) {
+        return Err(AppError::Internal(anyhow::anyhow!(
+            "rebase strategy not implemented"
+        )));
+    }
+
     let source_obj = repo
         .revparse_single(source_ref)
         .map_err(|_| AppError::NotFound(format!("source ref '{}' not found", source_ref)))?;

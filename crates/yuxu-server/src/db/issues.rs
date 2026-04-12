@@ -42,45 +42,65 @@ pub async fn create(
     assignee_id: Option<Uuid>,
     label_ids: &[Uuid],
 ) -> Result<IssueRow> {
-    let mut tx = pool.begin().await?;
+    // Retry up to 3 times to handle race conditions in number allocation
+    const MAX_RETRIES: u32 = 3;
+    let mut retry_count = 0;
 
-    let issue = sqlx::query_as::<_, IssueRow>(
-        r#"
-        INSERT INTO issues (id, repo_id, number, title, body, state, author_id, assignee_id, created_at, updated_at)
-        VALUES (
-            $1, $2,
-            COALESCE((SELECT MAX(number) FROM issues WHERE repo_id = $2), 0) + 1,
-            $3, $4, 'open', $5, $6, NOW(), NOW()
-        )
-        RETURNING id, repo_id, number, title, body, state, author_id, assignee_id, created_at, updated_at, closed_at
-        "#,
-    )
-    .bind(Uuid::new_v4())
-    .bind(repo_id)
-    .bind(title)
-    .bind(body)
-    .bind(author_id)
-    .bind(assignee_id)
-    .fetch_one(&mut *tx)
-    .await?;
+    loop {
+        let mut tx = pool.begin().await?;
 
-    for label_id in label_ids {
-        sqlx::query(
+        let result = sqlx::query_as::<_, IssueRow>(
             r#"
-            INSERT INTO issue_labels (issue_id, label_id)
-            VALUES ($1, $2)
-            ON CONFLICT DO NOTHING
+            INSERT INTO issues (id, repo_id, number, title, body, state, author_id, assignee_id, created_at, updated_at)
+            VALUES (
+                $1, $2,
+                COALESCE((SELECT MAX(number) FROM issues WHERE repo_id = $2), 0) + 1,
+                $3, $4, 'open', $5, $6, NOW(), NOW()
+            )
+            RETURNING id, repo_id, number, title, body, state, author_id, assignee_id, created_at, updated_at, closed_at
             "#,
         )
-        .bind(issue.id)
-        .bind(label_id)
-        .execute(&mut *tx)
-        .await?;
+        .bind(Uuid::new_v4())
+        .bind(repo_id)
+        .bind(title)
+        .bind(body)
+        .bind(author_id)
+        .bind(assignee_id)
+        .fetch_one(&mut *tx)
+        .await;
+
+        let issue = match result {
+            Ok(issue) => issue,
+            Err(e) => {
+                // Check for unique constraint violation (SQLSTATE 23505)
+                if let Some(db_err) = e.as_database_error() {
+                    if db_err.code().as_deref() == Some("23505") && retry_count < MAX_RETRIES {
+                        retry_count += 1;
+                        continue;
+                    }
+                }
+                return Err(e.into());
+            }
+        };
+
+        for label_id in label_ids {
+            sqlx::query(
+                r#"
+                INSERT INTO issue_labels (issue_id, label_id)
+                VALUES ($1, $2)
+                ON CONFLICT DO NOTHING
+                "#,
+            )
+            .bind(issue.id)
+            .bind(label_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+
+        return Ok(issue);
     }
-
-    tx.commit().await?;
-
-    Ok(issue)
 }
 
 pub async fn find_by_number(
@@ -151,15 +171,20 @@ pub async fn update(
     title: Option<&str>,
     body: Option<&str>,
     state: Option<&str>,
-    assignee_id: Option<Uuid>,
+    assignee_id: Option<Option<Uuid>>,
 ) -> Result<IssueRow> {
+    let (set_assignee, assignee_value) = match assignee_id {
+        Some(inner) => (true, inner),
+        None => (false, None),
+    };
+
     let row = sqlx::query_as::<_, IssueRow>(
         r#"
         UPDATE issues
         SET title = COALESCE($2, title),
             body = COALESCE($3, body),
             state = COALESCE($4, state),
-            assignee_id = COALESCE($5, assignee_id),
+            assignee_id = CASE WHEN $6 THEN $5 ELSE assignee_id END,
             closed_at = CASE
                 WHEN $4 = 'closed' AND closed_at IS NULL THEN NOW()
                 WHEN $4 = 'open' THEN NULL
@@ -174,7 +199,8 @@ pub async fn update(
     .bind(title)
     .bind(body)
     .bind(state)
-    .bind(assignee_id)
+    .bind(assignee_value)
+    .bind(set_assignee)
     .fetch_one(pool)
     .await?;
 

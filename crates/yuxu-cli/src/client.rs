@@ -84,8 +84,14 @@ impl ApiClient {
         if response.status().is_success() {
             Ok(())
         } else {
-            let err: ApiError = response.json().await.context("failed to parse error")?;
-            Err(anyhow::anyhow!("{}", err))
+            let status = response.status();
+            match response.json::<ApiError>().await {
+                Ok(api_err) => Err(anyhow::anyhow!("{}", api_err)),
+                Err(_) => {
+                    // Fall back to reading response text if JSON parse fails
+                    Err(anyhow::anyhow!("request failed with status {}", status))
+                }
+            }
         }
     }
 

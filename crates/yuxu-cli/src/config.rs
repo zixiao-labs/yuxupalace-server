@@ -25,7 +25,7 @@ impl Default for ServerConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthConfig {
-    #[serde(default)]
+    #[serde(default, skip)]
     pub token: Option<String>,
     #[serde(default)]
     pub username: Option<String>,
