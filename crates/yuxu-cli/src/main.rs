@@ -58,7 +58,7 @@ async fn main() {
         cfg.server.url = server;
     }
 
-    let client = client::ApiClient::new(&cfg);
+    let client = client::ApiClient::new(&cfg)?;
 
     let result = match cli.command {
         Commands::Auth { cmd } => commands::auth::run(cmd, client, &mut cfg).await,

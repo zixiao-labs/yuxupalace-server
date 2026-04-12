@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use std::time::Duration;
 
 use crate::config::CliConfig;
 
@@ -23,12 +24,17 @@ impl std::fmt::Display for ApiError {
 }
 
 impl ApiClient {
-    pub fn new(config: &CliConfig) -> Self {
-        Self {
-            client: Client::new(),
+    pub fn new(config: &CliConfig) -> Result<Self> {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .context("Failed to initialize HTTP client")?;
+
+        Ok(Self {
+            client,
             base_url: config.server.url.trim_end_matches('/').to_string(),
             token: config.auth.token.clone(),
-        }
+        })
     }
 
     pub fn with_token(mut self, token: String) -> Self {

@@ -157,6 +157,20 @@ pub async fn list(
     page: i64,
     per_page: i64,
 ) -> Result<(Vec<MrRow>, i64)> {
+    // Validate pagination parameters
+    if page < 1 {
+        return Err(anyhow::anyhow!(
+            "Invalid page parameter: must be >= 1, got {}",
+            page
+        ));
+    }
+    if per_page < 1 {
+        return Err(anyhow::anyhow!(
+            "Invalid per_page parameter: must be >= 1, got {}",
+            per_page
+        ));
+    }
+
     let offset = (page - 1) * per_page;
 
     let count_row = sqlx::query_as::<_, CountRow>(
