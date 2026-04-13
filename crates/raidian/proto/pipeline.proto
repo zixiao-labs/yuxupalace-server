@@ -1,5 +1,5 @@
 syntax = "proto3";
-package raidian.proto;
+package raidian;
 
 // CI/CD pipeline messages.
 
