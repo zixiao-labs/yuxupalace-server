@@ -1,0 +1,89 @@
+syntax = "proto3";
+package raidian;
+
+import "auth.proto";
+import "issue.proto";
+
+// Merge request and code review messages.
+
+message MergeRequest {
+  string id = 1;
+  string repository_id = 2;
+  int32 number = 3;
+  string title = 4;
+  string body = 5;
+  string source_branch = 6;
+  string target_branch = 7;
+  string state = 8;           // "open", "merged", or "closed"
+  UserProfile author = 9;
+  repeated UserProfile reviewers = 10;
+  string ci_status = 11;      // "pending", "running", "success", "failed", "cancelled"
+  repeated Label labels = 12;
+  int32 approval_count = 13;
+  int32 comment_count = 14;
+  int64 created_at = 15;
+  int64 updated_at = 16;
+  optional int64 merged_at = 17;
+  optional UserProfile merged_by = 18;
+}
+
+message CreateMergeRequestRequest {
+  string title = 1;
+  string body = 2;
+  string source_branch = 3;
+  string target_branch = 4;
+  repeated string reviewer_ids = 5;
+  repeated string label_ids = 6;
+}
+
+message UpdateMergeRequestRequest {
+  optional string title = 1;
+  optional string body = 2;
+  optional string state = 3;
+  repeated string reviewer_ids = 4;
+  repeated string label_ids = 5;
+}
+
+message ListMergeRequestsRequest {
+  optional string state = 1;
+  optional int32 page = 2;
+  optional int32 per_page = 3;
+}
+
+message ListMergeRequestsResponse {
+  repeated MergeRequest merge_requests = 1;
+  int32 total = 2;
+}
+
+message Review {
+  string id = 1;
+  UserProfile reviewer = 2;
+  string verdict = 3;         // "approved", "changes_requested", or "commented"
+  string body = 4;
+  int64 created_at = 5;
+}
+
+message SubmitReviewRequest {
+  string verdict = 1;
+  string body = 2;
+}
+
+message MergeMergeRequestRequest {
+  string strategy = 1;        // "merge", "squash", or "rebase"
+}
+
+message MrComment {
+  string id = 1;
+  UserProfile author = 2;
+  string body = 3;
+  optional string file_path = 4;
+  optional int32 line_number = 5;
+  int64 created_at = 6;
+  int64 updated_at = 7;
+}
+
+message CreateMrCommentRequest {
+  string body = 1;
+  optional string file_path = 2;
+  optional int32 line_number = 3;
+}

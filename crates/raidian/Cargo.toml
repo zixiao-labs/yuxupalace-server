@@ -1,0 +1,13 @@
+[package]
+name = "raidian"
+description = "Shared protobuf definitions for YuXu DevOps platform - used by server, CLI, and editor integrations (Zed, Logos)"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+prost.workspace = true
+serde.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true

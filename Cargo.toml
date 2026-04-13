@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/raidian",
+    "crates/yuxu-core",
+    "crates/yuxu-server",
+    "crates/yuxu-cli",
+]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT"
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Common utilities
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+thiserror = "2"
+
+# Protobuf
+prost = "0.13"
+prost-build = "0.13"
+prost-types = "0.13"
+
+# Internal crates
+raidian = { path = "crates/raidian" }
+yuxu-core = { path = "crates/yuxu-core" }

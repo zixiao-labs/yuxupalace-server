@@ -1,0 +1,77 @@
+syntax = "proto3";
+package raidian;
+
+import "auth.proto";
+
+// Issue tracking messages.
+
+message Label {
+  string id = 1;
+  string name = 2;
+  string color = 3;
+  string description = 4;
+}
+
+message CreateLabelRequest {
+  string name = 1;
+  string color = 2;
+  string description = 3;
+}
+
+message Issue {
+  string id = 1;
+  string repository_id = 2;
+  int32 number = 3;
+  string title = 4;
+  string body = 5;
+  string state = 6;           // "open" or "closed"
+  UserProfile author = 7;
+  optional UserProfile assignee = 8;
+  repeated Label labels = 9;
+  int32 comment_count = 10;
+  int64 created_at = 11;
+  int64 updated_at = 12;
+  optional int64 closed_at = 13;
+}
+
+message CreateIssueRequest {
+  string title = 1;
+  string body = 2;
+  optional string assignee_id = 3;
+  repeated string label_ids = 4;
+}
+
+message UpdateIssueRequest {
+  optional string title = 1;
+  optional string body = 2;
+  optional string state = 3;
+  optional string assignee_id = 4;
+  repeated string label_ids = 5;
+}
+
+message ListIssuesRequest {
+  optional string state = 1;
+  optional int32 page = 2;
+  optional int32 per_page = 3;
+}
+
+message ListIssuesResponse {
+  repeated Issue issues = 1;
+  int32 total = 2;
+}
+
+message IssueComment {
+  string id = 1;
+  UserProfile author = 2;
+  string body = 3;
+  int64 created_at = 4;
+  int64 updated_at = 5;
+}
+
+message CreateCommentRequest {
+  string body = 1;
+}
+
+message ListCommentsResponse {
+  repeated IssueComment comments = 1;
+}

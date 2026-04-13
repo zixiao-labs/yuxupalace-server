@@ -1,0 +1,58 @@
+syntax = "proto3";
+package raidian;
+
+// Real-time collaboration messages (yrs/CRDT over WebSocket).
+// Protocol: binary WebSocket frames with 1-byte type prefix.
+// Types: Join(0x01), JoinAck(0x02), SyncUpdate(0x03), Awareness(0x04),
+//        ParticipantJoined(0x05), ParticipantLeft(0x06)
+//
+// Compatible with Logos IDE and Zed editor integrations.
+
+message CollabJoinRequest {
+  string repository_id = 1;
+  string file_path = 2;
+  optional string token = 3;  // JWT, optional for unauthenticated clients (e.g. Zed without auth)
+}
+
+message CollabJoinResponse {
+  string session_id = 1;
+  bytes initial_state = 2;    // Y.Doc encoded state vector
+  repeated CollabParticipant participants = 3;
+}
+
+message CollabParticipant {
+  string user_id = 1;
+  string display_name = 2;
+  string avatar_url = 3;
+}
+
+message CollabUpdate {
+  string session_id = 1;
+  bytes update = 2;           // yrs update payload
+}
+
+message CollabAwareness {
+  string session_id = 1;
+  string user_id = 2;
+  bytes awareness_state = 3;  // cursor position, selection, etc.
+}
+
+message CollabParticipantJoined {
+  CollabParticipant participant = 1;
+}
+
+message CollabParticipantLeft {
+  string user_id = 1;
+}
+
+message CollabSessionInfo {
+  string session_id = 1;
+  string repository_id = 2;
+  string file_path = 3;
+  repeated CollabParticipant participants = 4;
+  int64 created_at = 5;
+}
+
+message ListCollabSessionsResponse {
+  repeated CollabSessionInfo sessions = 1;
+}

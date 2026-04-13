@@ -1,0 +1,26 @@
+syntax = "proto3";
+package raidian;
+
+import "auth.proto";
+
+// Repository member and ACL messages.
+
+message RepositoryMember {
+  string id = 1;
+  UserProfile user = 2;
+  string role = 3;            // "owner", "maintainer", "developer", "reporter", "guest"
+  int64 joined_at = 4;
+}
+
+message AddMemberRequest {
+  string user_id = 1;
+  string role = 2;
+}
+
+message UpdateMemberRoleRequest {
+  string role = 1;
+}
+
+message ListMembersResponse {
+  repeated RepositoryMember members = 1;
+}

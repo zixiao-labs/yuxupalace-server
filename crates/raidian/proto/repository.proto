@@ -1,0 +1,66 @@
+syntax = "proto3";
+package raidian;
+
+import "auth.proto";
+
+// Repository and git-related messages.
+
+message Repository {
+  string id = 1;
+  string owner_id = 2;
+  string owner_username = 3;
+  string name = 4;
+  string full_name = 5;
+  string description = 6;
+  bool is_private = 7;
+  string default_branch = 8;
+  int64 created_at = 9;
+  int64 updated_at = 10;
+}
+
+message CreateRepositoryRequest {
+  string name = 1;
+  string description = 2;
+  bool is_private = 3;
+}
+
+message GitTreeEntry {
+  string name = 1;
+  string path = 2;
+  string entry_type = 3;      // "tree" or "blob"
+  int64 size = 4;
+  string oid = 5;
+}
+
+message GitBlobContent {
+  string path = 1;
+  string content = 2;
+  int64 size = 3;
+  string encoding = 4;        // "utf-8" or "base64"
+}
+
+message GitCommitInfo {
+  string oid = 1;
+  string message = 2;
+  string author_name = 3;
+  string author_email = 4;
+  int64 timestamp = 5;
+  repeated string parent_oids = 6;
+}
+
+message BranchProtectionRule {
+  string id = 1;
+  string repository_id = 2;
+  string branch_pattern = 3;
+  int32 require_approvals = 4;
+  bool require_ci_pass = 5;
+  bool prevent_force_push = 6;
+  int64 created_at = 7;
+}
+
+message CreateBranchProtectionRequest {
+  string branch_pattern = 1;
+  int32 require_approvals = 2;
+  bool require_ci_pass = 3;
+  bool prevent_force_push = 4;
+}
