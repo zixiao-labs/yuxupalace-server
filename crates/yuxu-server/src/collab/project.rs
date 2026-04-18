@@ -26,6 +26,14 @@ impl ProjectState {
         self.next_replica_id
     }
     pub fn all_conn_ids(&self) -> Vec<ConnectionId> {
-        self.collaborators.iter().map(|c| c.conn_id).collect()
+        // Host_conn_id is also recorded in `collaborators` (is_host = true),
+        // so the direct iteration already covers everyone; but defend against
+        // the list being out of sync by prepending and deduplicating.
+        let mut out: Vec<ConnectionId> = std::iter::once(self.host_conn_id)
+            .chain(self.collaborators.iter().map(|c| c.conn_id))
+            .collect();
+        out.sort_unstable();
+        out.dedup();
+        out
     }
 }

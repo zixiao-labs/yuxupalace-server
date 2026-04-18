@@ -108,19 +108,15 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
             };
             let room_pb = state_room.to_pb();
             hub.rooms.insert(room_id, state_room);
+            let (lk_token, lk_url) = livekit_info(state, &user_id, &live_kit_room);
             hub.send_to(
                 conn_id,
                 &envelope::respond_with(
                     req_id,
                     Payload::CreateRoomResponse(pb::CreateRoomResponse {
                         room: Some(room_pb),
-                        live_kit_connection_info_token: super::livekit::issue_token(
-                            &user_id,
-                            &live_kit_room,
-                        ),
-                        live_kit_connection_info_server_url: super::livekit::server_url(
-                            &state.config.live_kit_url,
-                        ),
+                        live_kit_connection_info_token: lk_token,
+                        live_kit_connection_info_server_url: lk_url,
                     }),
                 ),
             );
@@ -149,16 +145,14 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
                 conn_id,
                 &envelope::respond_with(
                     req_id,
-                    Payload::JoinRoomResponse(pb::JoinRoomResponse {
-                        room: Some(room_pb.clone()),
-                        live_kit_connection_info_token: super::livekit::issue_token(
-                            &user_id,
-                            &live_kit_room,
-                        ),
-                        live_kit_connection_info_server_url: super::livekit::server_url(
-                            &state.config.live_kit_url,
-                        ),
-                        channel_id: None,
+                    Payload::JoinRoomResponse({
+                        let (lk_token, lk_url) = livekit_info(state, &user_id, &live_kit_room);
+                        pb::JoinRoomResponse {
+                            room: Some(room_pb.clone()),
+                            live_kit_connection_info_token: lk_token,
+                            live_kit_connection_info_server_url: lk_url,
+                            channel_id: None,
+                        }
                     }),
                 ),
             );
@@ -233,7 +227,7 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
         }
         Payload::JoinProject(j) => {
             let user_id = hub.user_of(conn_id);
-            let (replica_id, host_conn) = {
+            let (replica_id, host_conn, existing) = {
                 let Some(mut proj) = hub.projects.get_mut(&j.project_id) else {
                     hub.send_to(
                         conn_id,
@@ -242,13 +236,28 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
                     return;
                 };
                 let replica_id = proj.alloc_replica();
+                let existing: Vec<pb::Collaborator> = proj
+                    .collaborators
+                    .iter()
+                    .map(|c| pb::Collaborator {
+                        peer_id: Some(pb::PeerId {
+                            owner_id: 1,
+                            id: c.conn_id,
+                        }),
+                        replica_id: c.replica_id,
+                        user_id: super::hub::user_id_to_u64(&c.user_id),
+                        is_host: c.is_host,
+                        committer_name: None,
+                        committer_email: None,
+                    })
+                    .collect();
                 proj.collaborators.push(ProjectCollaborator {
                     conn_id,
                     user_id: user_id.clone(),
                     replica_id,
                     is_host: false,
                 });
-                (replica_id, proj.host_conn_id)
+                (replica_id, proj.host_conn_id, existing)
             };
             hub.send_to(
                 conn_id,
@@ -257,7 +266,7 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
                     Payload::JoinProjectResponse(pb::JoinProjectResponse {
                         replica_id,
                         worktrees: Vec::new(),
-                        collaborators: Vec::new(),
+                        collaborators: existing,
                         language_servers: Vec::new(),
                         repositories: Vec::new(),
                         role: pb::RoleType::RoleMember as i32,
@@ -275,7 +284,7 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
                                 id: conn_id,
                             }),
                             replica_id,
-                            user_id: user_id.parse().unwrap_or(0),
+                            user_id: super::hub::user_id_to_u64(&user_id),
                             is_host: false,
                             committer_name: None,
                             committer_email: None,
@@ -438,4 +447,17 @@ fn forward_to_host(
         payload: Some(payload),
     };
     hub.send_to(host, &env);
+}
+
+/// Best-effort LiveKit connection info. Until real token signing is wired up,
+/// `issue_token` fails — we log and surface empty strings so clients can detect
+/// that audio/video isn't available rather than connecting with a junk token.
+fn livekit_info(state: &AppState, user_id: &str, room: &str) -> (String, String) {
+    match super::livekit::issue_token(user_id, room) {
+        Ok(tok) => (tok, super::livekit::server_url(&state.config.live_kit_url)),
+        Err(e) => {
+            tracing::warn!(error = %e, room, "livekit token unavailable");
+            (String::new(), String::new())
+        }
+    }
 }

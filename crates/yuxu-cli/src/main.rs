@@ -27,16 +27,19 @@ enum AuthCmd {
         username: String,
         #[arg(long)]
         email: String,
+        /// Password. Prompted interactively if omitted; passing it on the CLI
+        /// leaks it into shell history and `ps aux`.
         #[arg(long)]
-        password: String,
+        password: Option<String>,
         #[arg(long)]
         display_name: Option<String>,
     },
     Login {
         #[arg(long)]
         ident: String,
+        /// Password. Prompted interactively if omitted.
         #[arg(long)]
-        password: String,
+        password: Option<String>,
     },
     Logout,
 }
@@ -69,8 +72,12 @@ async fn main() -> Result<()> {
             email,
             password,
             display_name,
-        }) => commands::auth::register(username, email, password, display_name).await?,
+        }) => {
+            let password = prompt_password_if_missing(password, "Password: ")?;
+            commands::auth::register(username, email, password, display_name).await?
+        }
         Cmd::Auth(AuthCmd::Login { ident, password }) => {
+            let password = prompt_password_if_missing(password, "Password: ")?;
             commands::auth::login(ident, password).await?
         }
         Cmd::Auth(AuthCmd::Logout) => commands::auth::logout().await?,
@@ -82,4 +89,11 @@ async fn main() -> Result<()> {
         }) => commands::repo::create(name, description, private).await?,
     }
     Ok(())
+}
+
+fn prompt_password_if_missing(pw: Option<String>, prompt: &str) -> Result<String> {
+    match pw {
+        Some(p) => Ok(p),
+        None => Ok(rpassword::prompt_password(prompt)?),
+    }
 }

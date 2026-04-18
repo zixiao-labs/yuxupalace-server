@@ -1,4 +1,4 @@
-use super::hub::ConnectionId;
+use super::hub::{ConnectionId, user_id_to_u64};
 use raidian::collab as pb;
 
 #[allow(dead_code)]
@@ -27,7 +27,7 @@ impl RoomState {
                 .participants
                 .iter()
                 .map(|p| pb::Participant {
-                    user_id: p.user_id.parse().unwrap_or(0),
+                    user_id: user_id_to_u64(&p.user_id),
                     peer_id: Some(p.peer_id),
                     projects: Vec::new(),
                     location: None,

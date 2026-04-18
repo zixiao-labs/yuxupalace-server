@@ -18,6 +18,8 @@ pub enum AppError {
     BadRequest(String),
     #[error("conflict: {0}")]
     Conflict(String),
+    #[error("not implemented")]
+    NotImplemented,
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]
@@ -40,17 +42,25 @@ impl IntoResponse for AppError {
             AppError::Forbidden(_) => (StatusCode::FORBIDDEN, "forbidden"),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             AppError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
+            AppError::NotImplemented => (StatusCode::NOT_IMPLEMENTED, "not_implemented"),
             AppError::Sqlx(sqlx::Error::RowNotFound) => (StatusCode::NOT_FOUND, "not_found"),
             AppError::Sqlx(_) | AppError::Anyhow(_) | AppError::Core(_) => {
                 tracing::error!(error = ?self, "internal server error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")
             }
         };
+        // Never leak internal error text to callers — it can include SQL, file
+        // paths, or backtraces. Log the full detail; return a generic phrase.
+        let message = if status == StatusCode::INTERNAL_SERVER_ERROR {
+            "internal server error".to_owned()
+        } else {
+            self.to_string()
+        };
         (
             status,
             Json(ErrBody {
                 error: kind,
-                message: self.to_string(),
+                message,
             }),
         )
             .into_response()

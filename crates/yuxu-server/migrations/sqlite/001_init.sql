@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS pipelines (
     branch           TEXT NOT NULL,
     commit_sha       TEXT NOT NULL,
     commit_message   TEXT NOT NULL DEFAULT '',
-    triggered_by     TEXT NOT NULL,
+    triggered_by     TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     status           TEXT NOT NULL DEFAULT 'pending',
     duration_secs    INTEGER,
     created_at       INTEGER NOT NULL,

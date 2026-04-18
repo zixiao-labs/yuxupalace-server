@@ -105,3 +105,16 @@ impl CollabHub {
         }
     }
 }
+
+/// Deterministically map an opaque user-id string (typically a UUID) into the
+/// `uint64` slot expected by the Zed-style protobuf. A FNV-1a hash keeps the
+/// mapping stable across processes and avoids the silent `0` collisions that
+/// `str::parse::<u64>().unwrap_or(0)` produces.
+pub fn user_id_to_u64(s: &str) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in s.as_bytes() {
+        hash ^= *b as u64;
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    hash
+}

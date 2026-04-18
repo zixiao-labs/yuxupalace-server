@@ -18,14 +18,24 @@ where
             .headers
             .get(axum::http::header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| AppError::Unauthorized("missing Authorization header".into()))?;
-        let token = header
-            .strip_prefix("Bearer ")
-            .ok_or_else(|| AppError::Unauthorized("expected `Bearer <token>`".into()))?;
-        let claims = app
-            .jwt
-            .verify(token)
-            .map_err(|e| AppError::Unauthorized(e.to_string()))?;
+            .ok_or_else(|| AppError::Unauthorized("missing credentials".into()))?;
+
+        // Accept any case of the `Bearer` scheme and tolerate surrounding
+        // whitespace. Intentionally use a single generic error message so we
+        // don't leak whether the scheme, token, or signature was at fault.
+        let generic = || AppError::Unauthorized("invalid credentials".into());
+        let (scheme, token) = header.split_once(' ').ok_or_else(generic)?;
+        if !scheme.eq_ignore_ascii_case("Bearer") {
+            return Err(generic());
+        }
+        let token = token.trim();
+        if token.is_empty() {
+            return Err(generic());
+        }
+        let claims = app.jwt.verify(token).map_err(|e| {
+            tracing::debug!(error = %e, "jwt verification failed");
+            generic()
+        })?;
         Ok(AuthUser(claims))
     }
 }

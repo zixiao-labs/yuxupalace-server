@@ -24,11 +24,18 @@ pub async fn register(
     if req.username.trim().is_empty() || req.password.len() < 8 {
         return Err(AppError::BadRequest("invalid credentials".into()));
     }
-    if db::users::find_by_username_or_email(&state.db, &req.username)
+    // `find_by_username_or_email` matches the single argument against either
+    // column, so a username collision *and* an email collision have to be
+    // checked independently.
+    let username_taken = db::users::find_by_username_or_email(&state.db, &req.username)
         .await?
-        .is_some()
-    {
-        return Err(AppError::Conflict("username already taken".into()));
+        .is_some();
+    let email_taken = !req.email.is_empty()
+        && db::users::find_by_username_or_email(&state.db, &req.email)
+            .await?
+            .is_some();
+    if username_taken || email_taken {
+        return Err(AppError::Conflict("username or email already taken".into()));
     }
     let now = chrono::Utc::now().timestamp();
     let rec = db::users::UserRecord {

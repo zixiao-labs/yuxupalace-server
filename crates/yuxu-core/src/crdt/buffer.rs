@@ -279,7 +279,7 @@ impl Buffer {
         new_text: &[String],
     ) {
         // Resolve all ranges to indices *before* any mutation.
-        let mut resolved: Vec<(usize, u64, usize, u64)> = ranges
+        let resolved: Vec<(usize, u64, usize, u64)> = ranges
             .iter()
             .map(|(s, e)| {
                 let (si, so) = self.resolve_anchor(*s);
@@ -287,6 +287,26 @@ impl Buffer {
                 (si, so, ei, eo)
             })
             .collect();
+
+        // One Insertion per edit op carries the concatenation of every non-empty
+        // new_text slice. Each range's fragment points into that insertion at a
+        // distinct offset, so remote replicas compute identical fragments without
+        // needing extra Lamport ids in the op.
+        let mut slice_offsets: Vec<u64> = Vec::with_capacity(new_text.len());
+        let mut concat = String::new();
+        for text in new_text {
+            slice_offsets.push(concat.len() as u64);
+            concat.push_str(text);
+        }
+        if !concat.is_empty() {
+            self.insertions.insert(
+                timestamp,
+                Insertion {
+                    id: timestamp,
+                    text: concat,
+                },
+            );
+        }
 
         // Sort indices (descending) so later mutations don't invalidate earlier ones.
         let mut order: Vec<usize> = (0..resolved.len()).collect();
@@ -323,24 +343,16 @@ impl Buffer {
                 self.fragments[i].deletions.push(timestamp);
             }
 
-            // Insert new text as a fresh insertion at left_cut.
+            // Point a fragment at this range's slot in the shared insertion.
             if !text.is_empty() {
-                self.insertions.insert(
-                    timestamp,
-                    Insertion {
-                        id: timestamp,
-                        text: text.clone(),
-                    },
-                );
                 let frag = Fragment {
                     insertion: timestamp,
-                    start: 0,
+                    start: slice_offsets[idx],
                     len: text.len() as u64,
                     deletions: Vec::new(),
                 };
                 self.fragments.insert(left_cut, frag);
             }
-            let _ = &mut resolved;
         }
     }
 
@@ -418,5 +430,23 @@ mod tests {
         assert_eq!(a.text(), "X");
         let _ = a.local_undo(vec![ts]);
         assert_eq!(a.text(), "");
+    }
+
+    #[test]
+    fn multi_range_edit_uses_distinct_slices() {
+        // Regression: a single Edit operation with multiple non-empty new_text
+        // entries must not overwrite itself in self.insertions. Replacing two
+        // disjoint characters with distinct text should land each piece in the
+        // correct place.
+        let mut a = Buffer::new(1, "01234");
+        let op = a
+            .local_edit(vec![(0, 1), (4, 5)], vec!["A".into(), "B".into()])
+            .unwrap();
+        assert_eq!(a.text(), "A123B");
+
+        // Same op applied to a freshly-seeded replica converges.
+        let mut c = Buffer::new(1, "01234");
+        c.apply_remote(op);
+        assert_eq!(c.text(), "A123B");
     }
 }

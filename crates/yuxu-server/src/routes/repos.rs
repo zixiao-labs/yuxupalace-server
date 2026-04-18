@@ -69,5 +69,13 @@ pub async fn get_by_name(
     let rec = db::repositories::find_by_full_name(&state.db, &full_name)
         .await?
         .ok_or_else(|| AppError::NotFound("repository".into()))?;
-    Ok(Json(to_pb(&rec, &claims.username)))
+    // Access control: private repos are only visible to their owner (and admins).
+    if rec.is_private && rec.owner_id != claims.sub && !claims.is_admin {
+        return Err(AppError::NotFound("repository".into()));
+    }
+    // Look up the real owner rather than assuming it's the requester.
+    let owner = db::users::find_by_id(&state.db, &rec.owner_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("repository owner".into()))?;
+    Ok(Json(to_pb(&rec, &owner.username)))
 }

@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let cfg = Arc::new(config::Config::from_env());
+    let cfg = Arc::new(config::Config::from_env()?);
     let db = db::connect(&cfg.database_url).await?;
     db::run_migrations(&db).await?;
 
