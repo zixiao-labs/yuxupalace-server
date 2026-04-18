@@ -32,8 +32,11 @@ pub struct CollabHub {
 /// Side effects produced by `deregister` that the caller should broadcast.
 #[derive(Default)]
 pub struct DisconnectEffects {
-    pub removed_project_ids: Vec<u64>,
-    pub remaining_guest_conns: Vec<ConnectionId>,
+    /// Projects hosted by the departing connection that were torn down.
+    /// Each entry is `(project_id, guests_to_notify)` — guests exclude the
+    /// departing host and are deduplicated within the project, so each
+    /// `UnshareProject` goes only to that project's remaining collaborators.
+    pub removed_projects: Vec<(u64, Vec<ConnectionId>)>,
     pub affected_rooms: Vec<u64>,
 }
 
@@ -115,7 +118,7 @@ impl CollabHub {
                 projects_to_drop.push(*entry.key());
             }
         }
-        // Drop hosted projects entirely and collect the guest ids to notify.
+        // Drop hosted projects entirely and collect each project's guest ids.
         for pid in &projects_to_drop {
             if let Some((_, proj)) = self.projects.remove(pid) {
                 if let Some(mut room) = self.rooms.get_mut(&proj.room_id) {
@@ -124,12 +127,13 @@ impl CollabHub {
                         effects.affected_rooms.push(proj.room_id);
                     }
                 }
+                let mut guests: Vec<ConnectionId> = Vec::new();
                 for c in &proj.collaborators {
-                    if c.conn_id != conn_id && !effects.remaining_guest_conns.contains(&c.conn_id) {
-                        effects.remaining_guest_conns.push(c.conn_id);
+                    if c.conn_id != conn_id && !guests.contains(&c.conn_id) {
+                        guests.push(c.conn_id);
                     }
                 }
-                effects.removed_project_ids.push(*pid);
+                effects.removed_projects.push((*pid, guests));
             }
         }
         // For projects we *didn't* host, just remove the departing collaborator.
@@ -137,14 +141,17 @@ impl CollabHub {
             proj.collaborators.retain(|c| c.conn_id != conn_id);
         }
 
-        // Fan out the disconnect notifications. `broadcast_internal` won't
-        // recurse into deregister on its own overflow — we just log; the slow
-        // peer will be evicted on its own next failed enqueue.
-        for pid in &effects.removed_project_ids {
+        // Fan out the disconnect notifications. Each project's UnshareProject
+        // goes only to its own remaining guests — previously we broadcast to
+        // the union of guests across every hosted project, which leaked
+        // project ids to unrelated peers. `broadcast_internal` won't recurse
+        // into deregister on its own overflow; a slow peer will be evicted on
+        // its own next failed enqueue.
+        for (pid, guests) in &effects.removed_projects {
             let env = super::envelope::unsolicited(pb::envelope::Payload::UnshareProject(
                 pb::UnshareProject { project_id: *pid },
             ));
-            self.broadcast_internal(&effects.remaining_guest_conns, &env);
+            self.broadcast_internal(guests, &env);
         }
 
         // Notify remaining participants of each affected room. Read after all
