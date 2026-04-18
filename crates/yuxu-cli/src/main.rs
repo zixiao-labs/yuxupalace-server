@@ -2,75 +2,106 @@ mod client;
 mod commands;
 mod config;
 
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "yuxu", about = "YuXu DevOps CLI", version)]
+#[command(name = "yuxu", version, about = "YuXu platform CLI")]
 struct Cli {
-    /// Server URL (overrides config)
+    /// Override the API server URL for this invocation. Bootstraps a first
+    /// connection to a remote/self-hosted backend without editing config.toml
+    /// by hand.
     #[arg(long, global = true, env = "YUXU_SERVER")]
     server: Option<String>,
 
     #[command(subcommand)]
-    command: Commands,
+    cmd: Cmd,
 }
 
 #[derive(Subcommand)]
-enum Commands {
-    /// Authentication commands
-    Auth {
-        #[command(subcommand)]
-        cmd: commands::auth::AuthCmd,
+enum Cmd {
+    #[command(subcommand)]
+    Auth(AuthCmd),
+    #[command(subcommand)]
+    Repo(RepoCmd),
+}
+
+#[derive(Subcommand)]
+enum AuthCmd {
+    Register {
+        #[arg(long)]
+        username: String,
+        #[arg(long)]
+        email: String,
+        /// Password. Prompted interactively if omitted; passing it on the CLI
+        /// leaks it into shell history and `ps aux`.
+        #[arg(long)]
+        password: Option<String>,
+        #[arg(long)]
+        display_name: Option<String>,
     },
-    /// Repository commands
-    Repo {
-        #[command(subcommand)]
-        cmd: commands::repo::RepoCmd,
+    Login {
+        #[arg(long)]
+        ident: String,
+        /// Password. Prompted interactively if omitted.
+        #[arg(long)]
+        password: Option<String>,
     },
-    /// Issue commands
-    Issue {
-        #[command(subcommand)]
-        cmd: commands::issue::IssueCmd,
-    },
-    /// Merge request commands
-    Mr {
-        #[command(subcommand)]
-        cmd: commands::mr::MrCmd,
-    },
-    /// Pipeline commands
-    Pipeline {
-        #[command(subcommand)]
-        cmd: commands::pipeline::PipelineCmd,
-    },
-    /// Member management commands
-    Member {
-        #[command(subcommand)]
-        cmd: commands::member::MemberCmd,
+    Logout,
+}
+
+#[derive(Subcommand)]
+enum RepoCmd {
+    List,
+    Create {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long, default_value_t = false)]
+        private: bool,
     },
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
+        )
+        .init();
+
     let cli = Cli::parse();
-
-    let mut cfg = config::load().unwrap_or_else(|_| config::CliConfig::default());
-    if let Some(server) = cli.server {
-        cfg.server.url = server;
+    let server_override = cli.server.clone();
+    match cli.cmd {
+        Cmd::Auth(AuthCmd::Register {
+            username,
+            email,
+            password,
+            display_name,
+        }) => {
+            let password = prompt_password_if_missing(password, "Password: ")?;
+            commands::auth::register(server_override, username, email, password, display_name)
+                .await?
+        }
+        Cmd::Auth(AuthCmd::Login { ident, password }) => {
+            let password = prompt_password_if_missing(password, "Password: ")?;
+            commands::auth::login(server_override, ident, password).await?
+        }
+        Cmd::Auth(AuthCmd::Logout) => commands::auth::logout().await?,
+        Cmd::Repo(RepoCmd::List) => commands::repo::list(server_override).await?,
+        Cmd::Repo(RepoCmd::Create {
+            name,
+            description,
+            private,
+        }) => commands::repo::create(server_override, name, description, private).await?,
     }
+    Ok(())
+}
 
-    let client = client::ApiClient::new(&cfg)?;
-
-    let result = match cli.command {
-        Commands::Auth { cmd } => commands::auth::run(cmd, client, &mut cfg).await,
-        Commands::Repo { cmd } => commands::repo::run(cmd, client).await,
-        Commands::Issue { cmd } => commands::issue::run(cmd, client).await,
-        Commands::Mr { cmd } => commands::mr::run(cmd, client).await,
-        Commands::Pipeline { cmd } => commands::pipeline::run(cmd, client).await,
-        Commands::Member { cmd } => commands::member::run(cmd, client).await,
-    };
-
-    if let Err(e) = result {
-        eprintln!("Error: {}", e);
-        std::process::exit(1);
+fn prompt_password_if_missing(pw: Option<String>, prompt: &str) -> Result<String> {
+    match pw {
+        Some(p) => Ok(p),
+        None => Ok(rpassword::prompt_password(prompt)?),
     }
 }

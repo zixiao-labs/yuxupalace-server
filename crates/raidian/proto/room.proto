@@ -1,0 +1,84 @@
+syntax = "proto3";
+package raidian.collab;
+
+import "peer.proto";
+
+message Room {
+  uint64 id = 1;
+  repeated Participant participants = 2;
+  repeated PendingParticipant pending_participants = 3;
+  repeated ParticipantProject shared_projects = 4;
+  string live_kit_room = 5;
+  optional string channel_id = 6;
+}
+
+message Participant {
+  uint64 user_id = 1;
+  PeerId peer_id = 2;
+  repeated ParticipantProject projects = 3;
+  ParticipantLocation location = 4;
+  uint32 participant_index = 5;
+  ParticipantRole role = 6;
+  optional string muted_reason = 7;
+}
+
+enum ParticipantRole {
+  PARTICIPANT_MEMBER = 0;
+  PARTICIPANT_ADMIN  = 1;
+  PARTICIPANT_GUEST  = 2;
+  PARTICIPANT_TALKER = 3;
+}
+
+message PendingParticipant {
+  uint64 user_id = 1;
+  uint64 calling_user_id = 2;
+  optional uint64 initial_project_id = 3;
+}
+
+message ParticipantProject {
+  uint64 id = 1;
+  repeated string worktree_root_names = 2;
+}
+
+message ParticipantLocation {
+  oneof variant {
+    SharedProject shared_project = 1;
+    UnsharedProject unshared_project = 2;
+    External external = 3;
+  }
+  message SharedProject   { uint64 id = 1; }
+  message UnsharedProject {}
+  message External        {}
+}
+
+message CreateRoom {}
+message CreateRoomResponse {
+  Room room = 1;
+  string live_kit_connection_info_token = 2;
+  string live_kit_connection_info_server_url = 3;
+}
+
+message JoinRoom { uint64 id = 1; }
+message JoinRoomResponse {
+  Room room = 1;
+  string live_kit_connection_info_token = 2;
+  string live_kit_connection_info_server_url = 3;
+  optional uint64 channel_id = 4;
+}
+
+message LeaveRoom {}
+
+message RoomUpdated { Room room = 1; }
+
+message Call {
+  uint64 room_id = 1;
+  uint64 called_user_id = 2;
+  optional uint64 initial_project_id = 3;
+}
+message IncomingCall {
+  uint64 room_id = 1;
+  uint64 calling_user_id = 2;
+  repeated uint64 participant_user_ids = 3;
+  optional ParticipantProject initial_project = 4;
+}
+message DeclineCall { uint64 room_id = 1; }

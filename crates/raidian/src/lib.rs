@@ -83,3 +83,13 @@ pub mod pipeline {
 pub mod dashboard {
     pub use crate::generated::{DashboardStats, RecentActivity};
 }
+
+/// Zed-style real-time collaboration protocol (package `raidian.collab`).
+///
+/// Covers the binary WebSocket envelope, CRDT buffer operations, room/project
+/// state, and LSP/Git forwarding messages used by the `/rpc` endpoint.
+#[rustfmt::skip]
+#[allow(clippy::all)]
+pub mod collab {
+    include!("generated_collab.rs");
+}

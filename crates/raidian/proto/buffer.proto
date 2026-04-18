@@ -1,0 +1,199 @@
+syntax = "proto3";
+package raidian.collab;
+
+message OpenBufferById {
+  uint64 project_id = 1;
+  uint64 buffer_id = 2;
+}
+message OpenBufferByPath {
+  uint64 project_id = 1;
+  uint64 worktree_id = 2;
+  string path = 3;
+}
+message OpenBufferResponse {
+  uint64 buffer_id = 1;
+  bytes content = 2;
+  string file_path = 3;
+  repeated VectorClockEntry version = 4;
+  optional uint64 mtime_seconds = 5;
+  optional uint32 mtime_nanos = 6;
+  bool is_dirty = 7;
+  repeated DiagnosticSet diagnostic_sets = 8;
+  repeated Selection selections = 9;
+  string language_name = 10;
+  repeated CompletionTrigger completion_triggers = 11;
+}
+
+message UpdateBuffer {
+  uint64 project_id = 1;
+  uint64 buffer_id = 2;
+  repeated Operation operations = 3;
+}
+
+message Operation {
+  oneof variant {
+    Edit edit = 1;
+    Undo undo = 2;
+    UpdateSelections update_selections = 3;
+    UpdateDiagnostics update_diagnostics = 4;
+    UpdateCompletionTriggers update_completion_triggers = 5;
+  }
+
+  message Edit {
+    LamportTimestamp timestamp = 1;
+    repeated VectorClockEntry version = 2;
+    repeated Range ranges = 3;
+    repeated string new_text = 4;
+  }
+
+  message Undo {
+    LamportTimestamp timestamp = 1;
+    repeated VectorClockEntry version = 2;
+    repeated UndoCount counts = 3;
+  }
+
+  message UpdateSelections {
+    LamportTimestamp timestamp = 1;
+    repeated Selection selections = 2;
+    bool line_mode = 3;
+    CursorShape cursor_shape = 4;
+  }
+
+  message UpdateDiagnostics {
+    LamportTimestamp timestamp = 1;
+    uint64 server_id = 2;
+    repeated Diagnostic diagnostics = 3;
+  }
+
+  message UpdateCompletionTriggers {
+    LamportTimestamp timestamp = 1;
+    uint64 server_id = 2;
+    repeated string triggers = 3;
+  }
+}
+
+message LamportTimestamp {
+  uint32 replica_id = 1;
+  uint32 value = 2;
+}
+
+message VectorClockEntry {
+  uint32 replica_id = 1;
+  uint32 timestamp = 2;
+}
+
+message Anchor {
+  LamportTimestamp timestamp = 1;
+  uint64 offset = 2;
+  Bias bias = 3;
+  optional uint32 buffer_id = 4;
+}
+
+enum Bias {
+  LEFT  = 0;
+  RIGHT = 1;
+}
+
+message Range {
+  Anchor start = 1;
+  Anchor end = 2;
+}
+
+message UndoCount {
+  LamportTimestamp operation_timestamp = 1;
+  uint32 count = 2;
+}
+
+message Selection {
+  uint64 id = 1;
+  Anchor start = 2;
+  Anchor end = 3;
+  bool reversed = 4;
+}
+
+enum CursorShape {
+  CURSOR_BAR       = 0;
+  CURSOR_BLOCK     = 1;
+  CURSOR_UNDERLINE = 2;
+  CURSOR_HOLLOW    = 3;
+}
+
+message Diagnostic {
+  Range range = 1;
+  Severity severity = 2;
+  string message = 3;
+  optional string code = 4;
+  optional string source = 5;
+  bool is_primary = 6;
+  bool is_disk_based = 7;
+  uint32 group_id = 8;
+}
+enum Severity {
+  SEVERITY_ERROR = 0;
+  SEVERITY_WARNING = 1;
+  SEVERITY_INFO = 2;
+  SEVERITY_HINT = 3;
+}
+
+message DiagnosticSet {
+  uint64 server_id = 1;
+  repeated Diagnostic diagnostics = 2;
+  LamportTimestamp lamport_timestamp = 3;
+}
+
+message CompletionTrigger {
+  uint64 server_id = 1;
+  string trigger_character = 2;
+}
+
+message SaveBuffer {
+  uint64 project_id = 1;
+  uint64 buffer_id = 2;
+  repeated VectorClockEntry version = 3;
+}
+message BufferSaved {
+  uint64 project_id = 1;
+  uint64 buffer_id = 2;
+  repeated VectorClockEntry version = 3;
+  uint64 mtime_seconds = 4;
+  uint32 mtime_nanos = 5;
+}
+
+message UpdateBufferFile {
+  uint64 project_id = 1;
+  uint64 buffer_id = 2;
+  File file = 3;
+}
+
+message File {
+  uint64 worktree_id = 1;
+  uint64 entry_id = 2;
+  string path = 3;
+  uint64 mtime_seconds = 4;
+  uint32 mtime_nanos = 5;
+  bool is_deleted = 6;
+}
+
+message ReloadBuffers {
+  uint64 project_id = 1;
+  repeated uint64 buffer_ids = 2;
+}
+message BufferReloaded {
+  uint64 project_id = 1;
+  uint64 buffer_id = 2;
+  repeated VectorClockEntry version = 3;
+  uint64 mtime_seconds = 4;
+  uint32 mtime_nanos = 5;
+}
+
+message SynchronizeBuffers {
+  uint64 project_id = 1;
+  repeated BufferVersion buffers = 2;
+}
+message SynchronizeBuffersResponse {
+  repeated BufferVersion buffers = 1;
+}
+message BufferVersion {
+  uint64 id = 1;
+  repeated VectorClockEntry version = 2;
+}

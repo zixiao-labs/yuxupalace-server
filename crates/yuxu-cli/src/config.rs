@@ -2,58 +2,65 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct CliConfig {
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct Config {
+    #[serde(default = "default_server")]
+    pub server: String,
     #[serde(default)]
-    pub server: ServerConfig,
-    #[serde(default)]
-    pub auth: AuthConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServerConfig {
-    pub url: String,
-}
-
-impl Default for ServerConfig {
-    fn default() -> Self {
-        Self {
-            url: "http://localhost:3000".to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct AuthConfig {
-    #[serde(default, skip)]
     pub token: Option<String>,
     #[serde(default)]
     pub username: Option<String>,
 }
 
-fn config_dir() -> Result<PathBuf> {
-    let home = dirs::home_dir().context("could not determine home directory")?;
-    Ok(home.join(".yuxu"))
+fn default_server() -> String {
+    "http://localhost:8080".into()
 }
 
-fn config_path() -> Result<PathBuf> {
-    Ok(config_dir()?.join("config.toml"))
+/// Resolve the config file path without touching the filesystem. `load()`
+/// intentionally does not create the config directory — users on read-only
+/// homes would otherwise fail before the missing-file fallback kicks in.
+pub fn config_path() -> Result<PathBuf> {
+    Ok(dirs::config_dir()
+        .context("no config dir")?
+        .join("yuxu")
+        .join("config.toml"))
 }
 
-pub fn load() -> Result<CliConfig> {
+pub fn load() -> Result<Config> {
     let path = config_path()?;
     if !path.exists() {
-        return Ok(CliConfig::default());
+        return Ok(Config {
+            server: default_server(),
+            ..Default::default()
+        });
     }
-    let content = std::fs::read_to_string(&path).context("failed to read config file")?;
-    let config: CliConfig = toml::from_str(&content).context("failed to parse config file")?;
-    Ok(config)
+    let s = std::fs::read_to_string(&path)?;
+    Ok(toml::from_str(&s)?)
 }
 
-pub fn save(config: &CliConfig) -> Result<()> {
-    let dir = config_dir()?;
-    std::fs::create_dir_all(&dir).context("failed to create config directory")?;
-    let content = toml::to_string_pretty(config).context("failed to serialize config")?;
-    std::fs::write(config_path()?, content).context("failed to write config file")?;
+pub fn save(cfg: &Config) -> Result<()> {
+    let path = config_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let body = toml::to_string_pretty(cfg)?;
+
+    // The file can carry a bearer token; keep it owner-only on Unix.
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .mode(0o600)
+            .open(&path)?;
+        f.write_all(body.as_bytes())?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&path, body)?;
+    }
     Ok(())
 }

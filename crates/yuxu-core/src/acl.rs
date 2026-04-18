@@ -1,78 +1,63 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Role {
-    Guest,
-    Reporter,
-    Developer,
-    Maintainer,
+pub enum RepoRole {
     Owner,
+    Maintainer,
+    Developer,
+    Reporter,
+    Guest,
 }
 
-impl Role {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl RepoRole {
+    pub fn rank(self) -> u8 {
+        match self {
+            RepoRole::Owner => 5,
+            RepoRole::Maintainer => 4,
+            RepoRole::Developer => 3,
+            RepoRole::Reporter => 2,
+            RepoRole::Guest => 1,
+        }
+    }
+    pub fn at_least(self, other: RepoRole) -> bool {
+        self.rank() >= other.rank()
+    }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RepoRole::Owner => "owner",
+            RepoRole::Maintainer => "maintainer",
+            RepoRole::Developer => "developer",
+            RepoRole::Reporter => "reporter",
+            RepoRole::Guest => "guest",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "guest" => Some(Role::Guest),
-            "reporter" => Some(Role::Reporter),
-            "developer" => Some(Role::Developer),
-            "maintainer" => Some(Role::Maintainer),
-            "owner" => Some(Role::Owner),
+            "owner" => Some(Self::Owner),
+            "maintainer" => Some(Self::Maintainer),
+            "developer" => Some(Self::Developer),
+            "reporter" => Some(Self::Reporter),
+            "guest" => Some(Self::Guest),
             _ => None,
         }
     }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Role::Guest => "guest",
-            Role::Reporter => "reporter",
-            Role::Developer => "developer",
-            Role::Maintainer => "maintainer",
-            Role::Owner => "owner",
-        }
-    }
-
-    pub fn can(&self, action: Action) -> bool {
-        match action {
-            Action::ViewRepo => true,
-            Action::CreateIssue => *self >= Role::Reporter,
-            Action::Comment => *self >= Role::Reporter,
-            Action::CreateBranch => *self >= Role::Developer,
-            Action::PushBranch => *self >= Role::Developer,
-            Action::CreateMergeRequest => *self >= Role::Developer,
-            Action::ReviewMergeRequest => *self >= Role::Developer,
-            Action::TriggerPipeline => *self >= Role::Developer,
-            Action::MergeMergeRequest => *self >= Role::Maintainer,
-            Action::ManageLabels => *self >= Role::Maintainer,
-            Action::ManageMembers => *self >= Role::Maintainer,
-            Action::ManageBranchProtection => *self >= Role::Maintainer,
-            Action::DeleteRepo => *self >= Role::Owner,
-            Action::TransferOwnership => *self >= Role::Owner,
-        }
-    }
 }
 
-impl fmt::Display for Role {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProjectRole {
+    Admin,
+    Member,
+    Guest,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Action {
-    ViewRepo,
-    CreateIssue,
-    Comment,
-    CreateBranch,
-    PushBranch,
-    CreateMergeRequest,
-    ReviewMergeRequest,
-    MergeMergeRequest,
-    ManageLabels,
-    ManageMembers,
-    ManageBranchProtection,
-    DeleteRepo,
-    TransferOwnership,
-    TriggerPipeline,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChannelRole {
+    Admin,
+    Member,
+    Talker,
+    Guest,
+    Banned,
 }

@@ -1,85 +1,74 @@
+use crate::{client::Client, config};
 use anyhow::Result;
-use clap::Subcommand;
-use colored::Colorize;
-use serde_json::Value;
+use raidian::{AuthResponse, LoginRequest, RegisterRequest};
 
-use crate::client::ApiClient;
-use crate::config::{self, CliConfig};
-
-#[derive(Subcommand)]
-pub enum AuthCmd {
-    Login {
-        #[arg(short, long)]
-        username: String,
-        password: Option<String>,
-    },
-    Register {
-        #[arg(short, long)]
-        username: String,
-        #[arg(short, long)]
-        email: String,
-        password: Option<String>,
-        #[arg(long)]
-        display_name: Option<String>,
-    },
-    Whoami,
-    Logout,
+fn load_with_override(server: Option<String>) -> Result<config::Config> {
+    let mut cfg = config::load()?;
+    if let Some(s) = server {
+        cfg.server = s;
+    }
+    Ok(cfg)
 }
 
-pub async fn run(cmd: AuthCmd, client: ApiClient, cfg: &mut CliConfig) -> Result<()> {
-    match cmd {
-        AuthCmd::Login { username, password } => {
-            let password = match password {
-                Some(p) => p,
-                None => {
-                    println!("Password: ");
-                    rpassword::read_password()?
-                }
-            };
-            let body = serde_json::json!({ "username": username, "password": password });
-            let res: Value = client.post("/auth/login", &body).await?;
-            let token = res["token"].as_str()
-                .filter(|t| !t.is_empty())
-                .ok_or_else(|| anyhow::anyhow!("server returned empty or missing token"))?
-                .to_string();
-            let uname = res["user"]["username"].as_str().unwrap_or(&username).to_string();
-            cfg.auth.token = Some(token);
-            cfg.auth.username = Some(uname.clone());
-            config::save(cfg)?;
-            println!("Logged in as {}", uname.bold());
-        }
-        AuthCmd::Register { username, email, password, display_name } => {
-            let password = match password {
-                Some(p) => p,
-                None => {
-                    println!("Password: ");
-                    rpassword::read_password()?
-                }
-            };
-            let body = serde_json::json!({ "username": username, "email": email, "password": password, "display_name": display_name });
-            let res: Value = client.post("/auth/register", &body).await?;
-            let token = res["token"].as_str()
-                .filter(|t| !t.is_empty())
-                .ok_or_else(|| anyhow::anyhow!("server returned empty or missing token"))?
-                .to_string();
-            cfg.auth.token = Some(token);
-            cfg.auth.username = Some(username.clone());
-            config::save(cfg)?;
-            println!("Registered and logged in as {}", username.bold());
-        }
-        AuthCmd::Whoami => {
-            let res: Value = client.get("/auth/me").await?;
-            let user = &res["user"];
-            println!("Username: {}", user["username"].as_str().unwrap_or("").bold());
-            println!("Email:    {}", user["email"].as_str().unwrap_or(""));
-            println!("Admin:    {}", user["is_admin"].as_bool().unwrap_or(false));
-        }
-        AuthCmd::Logout => {
-            cfg.auth.token = None;
-            cfg.auth.username = None;
-            config::save(cfg)?;
-            println!("Logged out");
-        }
-    }
+/// Persist `token`/`username` from an auth response without turning a
+/// `--server` override into a sticky config entry. The override is documented
+/// as per-invocation, so we reload the on-disk config before saving.
+fn persist_auth(token: Option<String>, username: Option<String>) -> Result<()> {
+    let mut disk = config::load()?;
+    disk.token = token;
+    disk.username = username;
+    config::save(&disk)
+}
+
+pub async fn register(
+    server: Option<String>,
+    username: String,
+    email: String,
+    password: String,
+    display_name: Option<String>,
+) -> Result<()> {
+    let cfg = load_with_override(server)?;
+    let client = Client::new(&cfg);
+    let resp: AuthResponse = client
+        .post(
+            "/api/auth/register",
+            &RegisterRequest {
+                username: username.clone(),
+                email,
+                password,
+                display_name: display_name.unwrap_or_else(|| username.clone()),
+            },
+        )
+        .await?;
+    let saved_username = resp.user.as_ref().map(|u| u.username.clone());
+    persist_auth(Some(resp.token), saved_username.clone())?;
+    println!("registered as {}", saved_username.as_deref().unwrap_or("?"));
+    Ok(())
+}
+
+pub async fn login(server: Option<String>, ident: String, password: String) -> Result<()> {
+    let cfg = load_with_override(server)?;
+    let client = Client::new(&cfg);
+    let resp: AuthResponse = client
+        .post(
+            "/api/auth/login",
+            &LoginRequest {
+                username_or_email: ident,
+                password,
+            },
+        )
+        .await?;
+    let saved_username = resp.user.as_ref().map(|u| u.username.clone());
+    persist_auth(Some(resp.token), saved_username.clone())?;
+    println!("logged in as {}", saved_username.as_deref().unwrap_or("?"));
+    Ok(())
+}
+
+pub async fn logout() -> Result<()> {
+    let mut cfg = config::load()?;
+    cfg.token = None;
+    cfg.username = None;
+    config::save(&cfg)?;
+    println!("logged out");
     Ok(())
 }

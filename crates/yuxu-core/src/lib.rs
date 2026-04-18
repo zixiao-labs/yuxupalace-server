@@ -1,4 +1,6 @@
 pub mod acl;
 pub mod auth;
+pub mod crdt;
 pub mod error;
-pub mod git_ops;
+
+pub use error::{Error, Result};

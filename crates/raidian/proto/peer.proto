@@ -1,0 +1,7 @@
+syntax = "proto3";
+package raidian.collab;
+
+message PeerId {
+  uint32 owner_id = 1;
+  uint32 id = 2;
+}
