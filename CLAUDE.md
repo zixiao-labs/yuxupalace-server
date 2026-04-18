@@ -57,7 +57,7 @@ The script produces `crates/raidian/src/generated.rs` and `generated_collab.rs`.
 | `YUXU_BIND` | no (defaults `0.0.0.0:8080`) | `SocketAddr` |
 | `DATABASE_URL` | no | defaults to `sqlite://yuxu.db?mode=rwc` or `postgres://...` depending on feature |
 | `YUXU_JWT_SECRET` | **yes** | must be ≥ 32 bytes, or set `YUXU_DEV_MODE=1` to auto-generate an ephemeral one (logs a warning; tokens don't survive restart) |
-| `YUXU_JWT_TTL_SECS` | no (default 86400) | positive integer |
+| `YUXU_JWT_TTL_SECS` | no (default 3600) | positive integer |
 | `YUXU_LIVEKIT_URL` | no | empty string if unset |
 
 ## Collab hub architecture
