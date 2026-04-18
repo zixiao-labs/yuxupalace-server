@@ -1,4 +1,5 @@
 use super::hub::ConnectionId;
+use raidian::collab as pb;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -18,6 +19,8 @@ pub struct ProjectState {
     pub host_user_id: String,
     pub collaborators: Vec<ProjectCollaborator>,
     pub next_replica_id: u32,
+    pub worktrees: Vec<pb::WorktreeMetadata>,
+    pub is_ssh: bool,
 }
 
 impl ProjectState {
@@ -35,5 +38,9 @@ impl ProjectState {
         out.sort_unstable();
         out.dedup();
         out
+    }
+
+    pub fn has_collaborator(&self, conn_id: ConnectionId) -> bool {
+        self.host_conn_id == conn_id || self.collaborators.iter().any(|c| c.conn_id == conn_id)
     }
 }

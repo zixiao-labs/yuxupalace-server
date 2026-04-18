@@ -1,5 +1,5 @@
 use super::envelope;
-use super::hub::{CollabHub, Connection, ConnectionId};
+use super::hub::{CollabHub, Connection, ConnectionId, OUTBOUND_CHANNEL_CAPACITY};
 use super::project::{ProjectCollaborator, ProjectState};
 use super::room::{RoomParticipant, RoomState};
 use crate::app_state::AppState;
@@ -23,7 +23,9 @@ pub async fn handler(
 async fn run(state: AppState, socket: WebSocket) {
     let hub = state.hub.clone();
     let (mut ws_tx, mut ws_rx) = socket.split();
-    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<bytes::Bytes>();
+    // Bounded outbound queue — see OUTBOUND_CHANNEL_CAPACITY. Slow clients get
+    // dropped by the hub rather than allowed to grow memory without bound.
+    let (out_tx, mut out_rx) = mpsc::channel::<bytes::Bytes>(OUTBOUND_CHANNEL_CAPACITY);
 
     let conn_id = hub.alloc_connection_id();
     let conn = Arc::new(Connection {
@@ -58,7 +60,16 @@ async fn run(state: AppState, socket: WebSocket) {
         }
     }
 
-    hub.deregister(conn_id);
+    // Disconnect cleanup: if this socket was hosting any projects, tell the
+    // remaining guests before dropping state.
+    let effects = hub.deregister(conn_id);
+    for pid in &effects.removed_project_ids {
+        let notice =
+            envelope::unsolicited(pb::envelope::Payload::UnshareProject(pb::UnshareProject {
+                project_id: *pid,
+            }));
+        hub.broadcast(&effects.remaining_guest_conns, &notice);
+    }
     writer.abort();
 }
 
@@ -72,10 +83,25 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
 
     match payload {
         Payload::Hello(h) => {
-            if let Some(token) = h.metadata.get("token")
-                && let Ok(claims) = state.jwt.verify(token)
-            {
-                hub.set_user(conn_id, claims.sub);
+            // If a token is supplied it MUST validate; otherwise the client
+            // explicitly chose an anonymous session by omitting it. This
+            // prevents an expired or tampered token from silently downgrading
+            // to anonymous.
+            if let Some(token) = h.metadata.get("token") {
+                match state.jwt.verify(token) {
+                    Ok(claims) => hub.set_user(conn_id, claims.sub),
+                    Err(_) => {
+                        hub.send_to(
+                            conn_id,
+                            &envelope::error(
+                                req_id,
+                                pb::error::Code::PermissionDenied,
+                                "invalid token",
+                            ),
+                        );
+                        return;
+                    }
+                }
             }
             hub.send_to(
                 conn_id,
@@ -179,6 +205,16 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
             );
         }
         Payload::ShareProject(sp) => {
+            // Only the room's participants may share a project into it —
+            // otherwise any socket could spawn orphaned projects against any
+            // room_id.
+            if !hub.is_room_participant(sp.room_id, conn_id) {
+                hub.send_to(
+                    conn_id,
+                    &envelope::error(req_id, pb::error::Code::NotFound, "room not found"),
+                );
+                return;
+            }
             let user_id = hub.user_of(conn_id);
             let project_id = hub.alloc_project_id();
             let proj = ProjectState {
@@ -193,8 +229,9 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
                     is_host: true,
                 }],
                 next_replica_id: 0,
+                worktrees: sp.worktrees,
+                is_ssh: sp.is_ssh_project,
             };
-            let _ = (sp.worktrees, sp.is_ssh_project);
             hub.projects.insert(project_id, proj);
             if let Some(mut room) = hub.rooms.get_mut(&sp.room_id) {
                 room.shared_project_ids.push(project_id);
@@ -227,7 +264,7 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
         }
         Payload::JoinProject(j) => {
             let user_id = hub.user_of(conn_id);
-            let (replica_id, host_conn, existing) = {
+            let (replica_id, host_conn, existing, worktrees_pb) = {
                 let Some(mut proj) = hub.projects.get_mut(&j.project_id) else {
                     hub.send_to(
                         conn_id,
@@ -235,6 +272,22 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
                     );
                     return;
                 };
+                // Authorization: a socket may only join a project shared in a
+                // room it already participates in. This prevents trivial ID
+                // guessing since project ids are allocated monotonically.
+                let project_room_id = proj.room_id;
+                if !hub.is_room_participant(project_room_id, conn_id) {
+                    drop(proj);
+                    hub.send_to(
+                        conn_id,
+                        &envelope::error(
+                            req_id,
+                            pb::error::Code::PermissionDenied,
+                            "not a room participant",
+                        ),
+                    );
+                    return;
+                }
                 let replica_id = proj.alloc_replica();
                 let existing: Vec<pb::Collaborator> = proj
                     .collaborators
@@ -251,13 +304,14 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
                         committer_email: None,
                     })
                     .collect();
+                let worktrees_pb = proj.worktrees.clone();
                 proj.collaborators.push(ProjectCollaborator {
                     conn_id,
                     user_id: user_id.clone(),
                     replica_id,
                     is_host: false,
                 });
-                (replica_id, proj.host_conn_id, existing)
+                (replica_id, proj.host_conn_id, existing, worktrees_pb)
             };
             hub.send_to(
                 conn_id,
@@ -265,7 +319,7 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
                     req_id,
                     Payload::JoinProjectResponse(pb::JoinProjectResponse {
                         replica_id,
-                        worktrees: Vec::new(),
+                        worktrees: worktrees_pb,
                         collaborators: existing,
                         language_servers: Vec::new(),
                         repositories: Vec::new(),
@@ -315,8 +369,13 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
             );
         }
 
-        // CRDT / state broadcasts.
+        // CRDT / state broadcasts. Every project-scoped mutation is gated on
+        // `is_project_collaborator` so a socket that never joined can't inject
+        // state by guessing project ids.
         Payload::UpdateBuffer(u) => {
+            if !ensure_project_collab(&hub, conn_id, u.project_id) {
+                return;
+            }
             let pid = u.project_id;
             hub.broadcast_to_project(
                 pid,
@@ -325,6 +384,9 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
             );
         }
         Payload::UpdateWorktree(u) => {
+            if !ensure_project_collab(&hub, conn_id, u.project_id) {
+                return;
+            }
             let pid = u.project_id;
             hub.broadcast_to_project(
                 pid,
@@ -333,6 +395,9 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
             );
         }
         Payload::UpdateRepository(u) => {
+            if !ensure_project_collab(&hub, conn_id, u.project_id) {
+                return;
+            }
             let pid = u.project_id;
             hub.broadcast_to_project(
                 pid,
@@ -341,6 +406,9 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
             );
         }
         Payload::UpdateDiagnosticSummary(u) => {
+            if !ensure_project_collab(&hub, conn_id, u.project_id) {
+                return;
+            }
             let pid = u.project_id;
             hub.broadcast_to_project(
                 pid,
@@ -349,6 +417,9 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
             );
         }
         Payload::UpdateLanguageServer(u) => {
+            if !ensure_project_collab(&hub, conn_id, u.project_id) {
+                return;
+            }
             let pid = u.project_id;
             hub.broadcast_to_project(
                 pid,
@@ -357,6 +428,9 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
             );
         }
         Payload::UpdateParticipantLocation(u) => {
+            if !hub.is_room_participant(u.room_id, conn_id) {
+                return;
+            }
             if let Some(room) = hub.rooms.get(&u.room_id) {
                 let targets: Vec<ConnectionId> = room
                     .participants
@@ -364,6 +438,7 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
                     .map(|p| p.conn_id)
                     .filter(|id| *id != conn_id)
                     .collect();
+                drop(room);
                 hub.broadcast(
                     &targets,
                     &envelope::unsolicited(Payload::UpdateParticipantLocation(u)),
@@ -371,7 +446,8 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
             }
         }
 
-        // Host-bound forwards.
+        // Host-bound forwards. `forward_to_host` re-validates collaborator
+        // membership and host liveness before relaying the request.
         Payload::SaveBuffer(r) => {
             forward_to_host(&hub, conn_id, req_id, r.project_id, Payload::SaveBuffer(r))
         }
@@ -422,6 +498,22 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
     }
 }
 
+/// Guard helper: true iff the given connection is a collaborator on the
+/// project. Non-collaborators are silently ignored for broadcast payloads so
+/// a guessed project id produces no observable effect.
+fn ensure_project_collab(hub: &CollabHub, conn_id: ConnectionId, project_id: u64) -> bool {
+    if hub.is_project_collaborator(project_id, conn_id) {
+        true
+    } else {
+        tracing::debug!(
+            conn_id,
+            project_id,
+            "dropping project-scoped message from non-collaborator"
+        );
+        false
+    }
+}
+
 fn forward_to_host(
     hub: &CollabHub,
     sender: ConnectionId,
@@ -429,14 +521,40 @@ fn forward_to_host(
     project_id: u64,
     payload: pb::envelope::Payload,
 ) {
-    let Some(proj) = hub.projects.get(&project_id) else {
+    let host = {
+        let Some(proj) = hub.projects.get(&project_id) else {
+            hub.send_to(
+                sender,
+                &envelope::error(req_id, pb::error::Code::NotFound, "project not found"),
+            );
+            return;
+        };
+        // Authorization: only current collaborators may trigger host-side work
+        // (LSP, git, disk IO). Without this, any connection could forge requests
+        // for any active project id.
+        if !proj.has_collaborator(sender) {
+            drop(proj);
+            hub.send_to(
+                sender,
+                &envelope::error(
+                    req_id,
+                    pb::error::Code::PermissionDenied,
+                    "not a project collaborator",
+                ),
+            );
+            return;
+        }
+        proj.host_conn_id
+    };
+    // Host may have disconnected between share and the request landing — return
+    // a concrete error instead of silently dropping the send.
+    if !hub.connection_alive(host) {
         hub.send_to(
             sender,
-            &envelope::error(req_id, pb::error::Code::NotFound, "project not found"),
+            &envelope::error(req_id, pb::error::Code::Disconnected, "host unavailable"),
         );
         return;
-    };
-    let host = proj.host_conn_id;
+    }
     let env = pb::Envelope {
         id: req_id,
         responding_to: None,

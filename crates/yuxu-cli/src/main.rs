@@ -8,6 +8,12 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "yuxu", version, about = "YuXu platform CLI")]
 struct Cli {
+    /// Override the API server URL for this invocation. Bootstraps a first
+    /// connection to a remote/self-hosted backend without editing config.toml
+    /// by hand.
+    #[arg(long, global = true, env = "YUXU_SERVER")]
+    server: Option<String>,
+
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -66,6 +72,7 @@ async fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+    let server_override = cli.server.clone();
     match cli.cmd {
         Cmd::Auth(AuthCmd::Register {
             username,
@@ -74,19 +81,20 @@ async fn main() -> Result<()> {
             display_name,
         }) => {
             let password = prompt_password_if_missing(password, "Password: ")?;
-            commands::auth::register(username, email, password, display_name).await?
+            commands::auth::register(server_override, username, email, password, display_name)
+                .await?
         }
         Cmd::Auth(AuthCmd::Login { ident, password }) => {
             let password = prompt_password_if_missing(password, "Password: ")?;
-            commands::auth::login(ident, password).await?
+            commands::auth::login(server_override, ident, password).await?
         }
         Cmd::Auth(AuthCmd::Logout) => commands::auth::logout().await?,
-        Cmd::Repo(RepoCmd::List) => commands::repo::list().await?,
+        Cmd::Repo(RepoCmd::List) => commands::repo::list(server_override).await?,
         Cmd::Repo(RepoCmd::Create {
             name,
             description,
             private,
-        }) => commands::repo::create(name, description, private).await?,
+        }) => commands::repo::create(server_override, name, description, private).await?,
     }
     Ok(())
 }

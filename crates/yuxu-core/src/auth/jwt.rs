@@ -7,8 +7,8 @@ pub struct Claims {
     pub sub: String,
     pub username: String,
     pub is_admin: bool,
-    pub exp: usize,
-    pub iat: usize,
+    pub exp: u64,
+    pub iat: u64,
 }
 
 #[derive(Clone)]
@@ -34,8 +34,8 @@ impl JwtService {
             sub: user_id.to_string(),
             username: username.to_string(),
             is_admin,
-            iat: now.timestamp() as usize,
-            exp: exp.timestamp() as usize,
+            iat: now.timestamp() as u64,
+            exp: exp.timestamp() as u64,
         };
         Ok(encode(&Header::default(), &claims, &self.encode)?)
     }

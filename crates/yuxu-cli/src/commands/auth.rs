@@ -2,13 +2,22 @@ use crate::{client::Client, config};
 use anyhow::Result;
 use raidian::{AuthResponse, LoginRequest, RegisterRequest};
 
+fn load_with_override(server: Option<String>) -> Result<config::Config> {
+    let mut cfg = config::load()?;
+    if let Some(s) = server {
+        cfg.server = s;
+    }
+    Ok(cfg)
+}
+
 pub async fn register(
+    server: Option<String>,
     username: String,
     email: String,
     password: String,
     display_name: Option<String>,
 ) -> Result<()> {
-    let mut cfg = config::load()?;
+    let mut cfg = load_with_override(server)?;
     let client = Client::new(&cfg);
     let resp: AuthResponse = client
         .post(
@@ -28,8 +37,8 @@ pub async fn register(
     Ok(())
 }
 
-pub async fn login(ident: String, password: String) -> Result<()> {
-    let mut cfg = config::load()?;
+pub async fn login(server: Option<String>, ident: String, password: String) -> Result<()> {
+    let mut cfg = load_with_override(server)?;
     let client = Client::new(&cfg);
     let resp: AuthResponse = client
         .post(

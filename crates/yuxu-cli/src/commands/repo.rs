@@ -2,8 +2,16 @@ use crate::{client::Client, config};
 use anyhow::Result;
 use raidian::{CreateRepositoryRequest, Repository};
 
-pub async fn list() -> Result<()> {
-    let cfg = config::load()?;
+fn load_with_override(server: Option<String>) -> Result<config::Config> {
+    let mut cfg = config::load()?;
+    if let Some(s) = server {
+        cfg.server = s;
+    }
+    Ok(cfg)
+}
+
+pub async fn list(server: Option<String>) -> Result<()> {
+    let cfg = load_with_override(server)?;
     let client = Client::new(&cfg);
     let repos: Vec<Repository> = client.get("/api/repos").await?;
     for r in repos {
@@ -17,8 +25,13 @@ pub async fn list() -> Result<()> {
     Ok(())
 }
 
-pub async fn create(name: String, description: Option<String>, private: bool) -> Result<()> {
-    let cfg = config::load()?;
+pub async fn create(
+    server: Option<String>,
+    name: String,
+    description: Option<String>,
+    private: bool,
+) -> Result<()> {
+    let cfg = load_with_override(server)?;
     let client = Client::new(&cfg);
     let r: Repository = client
         .post(
