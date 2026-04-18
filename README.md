@@ -45,7 +45,7 @@ devops-service/
 - **合并请求** — 全生命周期管理，代码审查，三种合并策略（merge/squash/rebase）
 - **分支保护** — 要求 CI 通过 + 审批数量才能合并
 - **CI/CD 流水线** — 触发、状态追踪、阶段日志
-- **实时协作** — 基于 [yrs](https://github.com/y-crdt/y-crdt)（Yjs Rust 实现）的 CRDT 协同编辑，WebSocket 传输
+- **实时协作** — 基于自研 CRDT 协同编辑，WebSocket 传输
 - **ACL 访问控制** — owner/maintainer/developer/reporter/guest 五级角色
 - **Protobuf API** — `raidian` crate 提供所有消息类型，可直接作为依赖使用
 
