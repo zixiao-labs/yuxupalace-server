@@ -1,0 +1,53 @@
+syntax = "proto3";
+package raidian.collab;
+
+import "peer.proto";
+import "room.proto";
+
+message UpdateParticipantLocation {
+  uint64 room_id = 1;
+  ParticipantLocation location = 2;
+}
+
+message Follow {
+  uint64 room_id = 1;
+  optional uint64 project_id = 2;
+  PeerId leader_id = 3;
+}
+message FollowResponse {
+  optional ViewId active_view = 1;
+  repeated View views = 2;
+}
+message Unfollow {
+  uint64 room_id = 1;
+  optional uint64 project_id = 2;
+  PeerId leader_id = 3;
+}
+
+message UpdateFollowers {
+  uint64 room_id = 1;
+  optional uint64 project_id = 2;
+  repeated PeerId follower_ids = 3;
+  oneof variant {
+    UpdateActiveView update_active_view = 10;
+    UpdateView update_view = 11;
+    CreateView create_view = 12;
+  }
+  message UpdateActiveView { optional ViewId id = 1; PeerId leader_id = 2; }
+  message UpdateView { ViewId id = 1; ViewState state = 2; }
+  message CreateView { View view = 1; }
+}
+
+message ViewId {
+  PeerId creator = 1;
+  uint64 id = 2;
+}
+message View {
+  ViewId id = 1;
+  PeerId leader_id = 2;
+  ViewState state = 3;
+  string variant = 4;
+}
+message ViewState {
+  bytes payload = 1;
+}

@@ -1,0 +1,77 @@
+syntax = "proto3";
+package raidian.collab;
+
+import "peer.proto";
+import "worktree.proto";
+
+message ShareProject {
+  uint64 room_id = 1;
+  repeated WorktreeMetadata worktrees = 2;
+  bool is_ssh_project = 3;
+}
+message ShareProjectResponse { uint64 project_id = 1; }
+
+message UnshareProject { uint64 project_id = 1; }
+
+message JoinProject {
+  uint64 project_id = 1;
+  repeated string committer_capabilities = 2;
+}
+message JoinProjectResponse {
+  uint32 replica_id = 1;
+  repeated WorktreeMetadata worktrees = 2;
+  repeated Collaborator collaborators = 3;
+  repeated LanguageServer language_servers = 4;
+  repeated RepositoryEntry repositories = 5;
+  RoleType role = 6;
+}
+
+enum RoleType {
+  ROLE_MEMBER = 0;
+  ROLE_GUEST  = 1;
+  ROLE_ADMIN  = 2;
+}
+
+message LeaveProject { uint64 project_id = 1; }
+
+message Collaborator {
+  PeerId peer_id = 1;
+  uint32 replica_id = 2;
+  uint64 user_id = 3;
+  bool is_host = 4;
+  optional string committer_name = 5;
+  optional string committer_email = 6;
+}
+
+message AddProjectCollaborator {
+  uint64 project_id = 1;
+  Collaborator collaborator = 2;
+}
+message RemoveProjectCollaborator {
+  uint64 project_id = 1;
+  PeerId peer_id = 2;
+}
+
+message UpdateProject {
+  uint64 project_id = 1;
+  repeated WorktreeMetadata worktrees = 2;
+}
+
+message WorktreeMetadata {
+  uint64 id = 1;
+  string root_name = 2;
+  bool visible = 3;
+  string abs_path = 4;
+}
+
+message LanguageServer {
+  uint64 id = 1;
+  string name = 2;
+  optional uint64 worktree_id = 3;
+}
+
+message RepositoryEntry {
+  uint64 id = 1;
+  string abs_path = 2;
+  optional string branch = 3;
+}

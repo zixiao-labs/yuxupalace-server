@@ -1,20 +1,21 @@
 [package]
 name = "yuxu-core"
-description = "Shared business logic for YuXu DevOps platform"
+description = "Domain types, auth, ACL, and hand-written Zed-style CRDT engine for YuXu."
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 
 [dependencies]
-raidian.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-uuid.workspace = true
-chrono.workspace = true
-anyhow.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-
-argon2 = "0.5"
-jsonwebtoken = "9"
-git2 = "0.20"
+raidian = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+jsonwebtoken = { workspace = true }
+argon2 = { workspace = true }
+rand = { workspace = true }
+prost = { workspace = true }

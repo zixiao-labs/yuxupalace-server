@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: clippy (${{ matrix.feature }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: [sqlite, postgres]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Clippy (yuxu-server with ${{ matrix.feature }})
+        run: cargo clippy -p yuxu-server --no-default-features --features ${{ matrix.feature }} -- -D warnings
+      - name: Clippy (rest of workspace)
+        run: cargo clippy -p raidian -p yuxu-core -p yuxu-cli -- -D warnings
+
+  test:
+    name: test (${{ matrix.feature }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: [sqlite, postgres]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Build workspace (yuxu-server = ${{ matrix.feature }})
+        run: |
+          cargo build -p raidian -p yuxu-core -p yuxu-cli
+          cargo build -p yuxu-server --no-default-features --features ${{ matrix.feature }}
+      - name: Run yuxu-core tests (CRDT)
+        run: cargo test -p yuxu-core --all-targets
+      - name: Run yuxu-server tests
+        run: cargo test -p yuxu-server --no-default-features --features ${{ matrix.feature }} --all-targets

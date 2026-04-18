@@ -1,0 +1,85 @@
+syntax = "proto3";
+package raidian.collab;
+
+import "peer.proto";
+import "session.proto";
+import "room.proto";
+import "project.proto";
+import "worktree.proto";
+import "buffer.proto";
+import "collaborator.proto";
+import "lsp.proto";
+import "git.proto";
+
+message Envelope {
+  uint32 id = 1;
+  optional uint32 responding_to = 2;
+  optional PeerId original_sender_id = 3;
+
+  oneof payload {
+    Hello hello = 10;
+    Ack ack = 11;
+    Error error = 12;
+    Ping ping = 13;
+    Pong pong = 14;
+
+    CreateRoom create_room = 20;
+    CreateRoomResponse create_room_response = 21;
+    JoinRoom join_room = 22;
+    JoinRoomResponse join_room_response = 23;
+    LeaveRoom leave_room = 24;
+    RoomUpdated room_updated = 25;
+    Call call = 26;
+    IncomingCall incoming_call = 27;
+    DeclineCall decline_call = 28;
+
+    ShareProject share_project = 40;
+    ShareProjectResponse share_project_response = 41;
+    UnshareProject unshare_project = 42;
+    JoinProject join_project = 43;
+    JoinProjectResponse join_project_response = 44;
+    LeaveProject leave_project = 45;
+    AddProjectCollaborator add_project_collaborator = 46;
+    RemoveProjectCollaborator remove_project_collaborator = 47;
+    UpdateProject update_project = 48;
+
+    UpdateWorktree update_worktree = 60;
+    CreateProjectEntry create_project_entry = 61;
+    RenameProjectEntry rename_project_entry = 62;
+    DeleteProjectEntry delete_project_entry = 63;
+    CopyProjectEntry copy_project_entry = 64;
+    ProjectEntryResponse project_entry_response = 65;
+    ExpandProjectEntry expand_project_entry = 66;
+
+    OpenBufferById open_buffer_by_id = 80;
+    OpenBufferByPath open_buffer_by_path = 81;
+    OpenBufferResponse open_buffer_response = 82;
+    UpdateBuffer update_buffer = 83;
+    UpdateBufferFile update_buffer_file = 84;
+    SaveBuffer save_buffer = 85;
+    BufferSaved buffer_saved = 86;
+    ReloadBuffers reload_buffers = 87;
+    BufferReloaded buffer_reloaded = 88;
+    SynchronizeBuffers synchronize_buffers = 89;
+    SynchronizeBuffersResponse synchronize_buffers_response = 90;
+
+    UpdateParticipantLocation update_participant_location = 100;
+    Follow follow = 101;
+    FollowResponse follow_response = 102;
+    Unfollow unfollow = 103;
+    UpdateFollowers update_followers = 104;
+
+    LspRequest lsp_request = 120;
+    LspResponse lsp_response = 121;
+    UpdateDiagnosticSummary update_diagnostic_summary = 122;
+    UpdateLanguageServer update_language_server = 123;
+
+    UpdateRepository update_repository = 140;
+    GitStage git_stage = 141;
+    GitUnstage git_unstage = 142;
+    GitCommit git_commit = 143;
+    GitBranches git_branches = 144;
+    GitBranchesResponse git_branches_response = 145;
+  }
+}
+

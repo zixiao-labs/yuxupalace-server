@@ -1,0 +1,170 @@
+syntax = "proto3";
+package raidian.collab;
+
+import "buffer.proto";
+
+message LspRequest {
+  uint64 project_id = 1;
+  uint64 buffer_id = 2;
+  uint64 language_server_id = 3;
+  oneof request {
+    GetCompletions get_completions = 10;
+    GetHover get_hover = 11;
+    GetDefinition get_definition = 12;
+    GetReferences get_references = 13;
+    GetDocumentSymbols get_document_symbols = 14;
+    PrepareRename prepare_rename = 15;
+    PerformRename perform_rename = 16;
+    GetCodeActions get_code_actions = 17;
+    ApplyCodeAction apply_code_action = 18;
+    FormatBuffers format_buffers = 19;
+    GetSignatureHelp get_signature_help = 20;
+    InlayHints inlay_hints = 21;
+  }
+}
+
+message LspResponse {
+  oneof response {
+    Completions completions = 10;
+    Hover hover = 11;
+    Locations locations = 12;
+    DocumentSymbols document_symbols = 14;
+    PrepareRenameResponse prepare_rename_response = 15;
+    Transaction transaction = 16;
+    CodeActions code_actions = 17;
+    SignatureHelp signature_help = 20;
+    InlayHintsResponse inlay_hints_response = 21;
+  }
+}
+
+message GetCompletions {
+  Anchor position = 1;
+  repeated VectorClockEntry version = 2;
+}
+message Completions { repeated Completion completions = 1; }
+message Completion {
+  string label = 1;
+  optional string detail = 2;
+  Range old_range = 3;
+  string new_text = 4;
+  int32 kind = 5;
+  repeated string filter_text = 6;
+  string documentation = 7;
+  bytes server_raw = 8;
+}
+
+message GetHover { Anchor position = 1; }
+message Hover {
+  Range range = 1;
+  repeated string contents_markdown = 2;
+}
+
+message GetDefinition  { Anchor position = 1; }
+message GetReferences  { Anchor position = 1; bool include_declaration = 2; }
+message Locations { repeated Location locations = 1; }
+message Location {
+  uint64 buffer_id = 1;
+  Range range = 2;
+}
+
+message GetDocumentSymbols {}
+message DocumentSymbols { repeated DocumentSymbol symbols = 1; }
+message DocumentSymbol {
+  string name = 1;
+  int32 kind = 2;
+  Range range = 3;
+  Range selection_range = 4;
+  repeated DocumentSymbol children = 5;
+}
+
+message PrepareRename { Anchor position = 1; }
+message PrepareRenameResponse { optional Range range = 1; }
+
+message PerformRename {
+  Anchor position = 1;
+  string new_name = 2;
+}
+
+message GetCodeActions {
+  Range range = 1;
+  repeated string kinds = 2;
+}
+message CodeActions { repeated CodeAction actions = 1; }
+message CodeAction {
+  string title = 1;
+  string kind = 2;
+  bytes server_raw = 3;
+}
+message ApplyCodeAction { CodeAction action = 1; }
+
+message FormatBuffers {
+  repeated uint64 buffer_ids = 1;
+  uint32 trigger = 2;
+}
+
+message GetSignatureHelp { Anchor position = 1; }
+message SignatureHelp {
+  repeated Signature signatures = 1;
+  uint32 active_signature = 2;
+  uint32 active_parameter = 3;
+}
+message Signature {
+  string label = 1;
+  repeated Parameter parameters = 2;
+  string documentation = 3;
+}
+message Parameter {
+  string label = 1;
+  string documentation = 2;
+}
+
+message InlayHints {
+  Range range = 1;
+  repeated VectorClockEntry version = 2;
+}
+message InlayHintsResponse { repeated InlayHint hints = 1; }
+message InlayHint {
+  Anchor position = 1;
+  string label = 2;
+  int32 kind = 3;
+  bool padding_left = 4;
+  bool padding_right = 5;
+}
+
+message Transaction {
+  repeated BufferTransaction buffer_transactions = 1;
+}
+message BufferTransaction {
+  uint64 buffer_id = 1;
+  repeated Operation operations = 2;
+  repeated VectorClockEntry version = 3;
+}
+
+message UpdateDiagnosticSummary {
+  uint64 project_id = 1;
+  uint64 worktree_id = 2;
+  DiagnosticSummary summary = 3;
+}
+message DiagnosticSummary {
+  string path = 1;
+  uint64 language_server_id = 2;
+  uint32 error_count = 3;
+  uint32 warning_count = 4;
+}
+
+message UpdateLanguageServer {
+  uint64 project_id = 1;
+  uint64 language_server_id = 2;
+  oneof variant {
+    WorkStart work_start = 3;
+    WorkProgress work_progress = 4;
+    WorkEnd work_end = 5;
+    DiskBasedDiagnosticsUpdating disk_based_diagnostics_updating = 6;
+    DiskBasedDiagnosticsUpdated disk_based_diagnostics_updated = 7;
+  }
+  message WorkStart { string token = 1; optional string title = 2; optional string message = 3; optional uint32 percentage = 4; }
+  message WorkProgress { string token = 1; optional string message = 2; optional uint32 percentage = 3; }
+  message WorkEnd { string token = 1; }
+  message DiskBasedDiagnosticsUpdating {}
+  message DiskBasedDiagnosticsUpdated {}
+}

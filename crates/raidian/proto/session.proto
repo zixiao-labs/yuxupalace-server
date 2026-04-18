@@ -1,0 +1,31 @@
+syntax = "proto3";
+package raidian.collab;
+
+import "peer.proto";
+
+message Hello {
+  PeerId peer_id = 1;
+  string protocol_version = 2;
+  map<string, string> metadata = 3;
+}
+
+message Ack {}
+
+message Error {
+  enum Code {
+    UNKNOWN = 0;
+    DISCONNECTED = 1;
+    UPGRADE_REQUIRED = 2;
+    INTERNAL = 3;
+    PERMISSION_DENIED = 4;
+    NOT_FOUND = 5;
+    RATE_LIMITED = 6;
+    WRONG_RELEASE_CHANNEL = 7;
+  }
+  Code code = 1;
+  string message = 2;
+  map<string, string> tags = 3;
+}
+
+message Ping {}
+message Pong {}

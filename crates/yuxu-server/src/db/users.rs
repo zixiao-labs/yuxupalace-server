@@ -1,158 +1,102 @@
-use anyhow::Result;
-use chrono::{DateTime, Utc};
-use sqlx::PgPool;
-use uuid::Uuid;
+use super::DbPool;
+use crate::error::AppError;
+use serde::{Deserialize, Serialize};
+use sqlx::Row;
 
-#[derive(sqlx::FromRow, Clone, serde::Serialize)]
-pub struct UserRow {
-    pub id: Uuid,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserRecord {
+    pub id: String,
     pub username: String,
     pub email: String,
     pub display_name: String,
-    #[serde(skip_serializing)]
+    pub avatar_url: String,
+    pub bio: String,
     pub password_hash: String,
-    pub avatar_url: Option<String>,
-    pub bio: Option<String>,
     pub is_admin: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
-pub async fn create_user(
-    pool: &PgPool,
-    username: &str,
-    email: &str,
-    password_hash: &str,
-    display_name: &str,
-) -> Result<UserRow> {
-    // Validate username does not contain '@' to ensure find_by_username_or_email works correctly
-    if username.contains('@') {
-        return Err(anyhow::anyhow!(
-            "invalid username: '@' character is not allowed in usernames"
-        ));
-    }
-
-    let row = sqlx::query_as::<_, UserRow>(
-        r#"
-        INSERT INTO users (id, username, email, password_hash, display_name, is_admin, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, false, NOW(), NOW())
-        RETURNING id, username, email, display_name, password_hash, avatar_url, bio, is_admin, created_at, updated_at
-        "#,
+pub async fn insert(pool: &DbPool, u: &UserRecord) -> Result<(), AppError> {
+    sqlx::query(
+        "INSERT INTO users (id, username, email, display_name, avatar_url, bio, password_hash, is_admin, created_at, updated_at) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
     )
-    .bind(Uuid::new_v4())
-    .bind(username)
-    .bind(email)
-    .bind(password_hash)
-    .bind(display_name)
-    .fetch_one(pool)
-    .await?;
-
-    Ok(row)
-}
-
-pub async fn find_by_username(pool: &PgPool, username: &str) -> Result<Option<UserRow>> {
-    let row = sqlx::query_as::<_, UserRow>(
-        r#"
-        SELECT id, username, email, display_name, password_hash, avatar_url, bio, is_admin, created_at, updated_at
-        FROM users
-        WHERE username = $1
-        "#,
-    )
-    .bind(username)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(row)
-}
-
-pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<UserRow>> {
-    let row = sqlx::query_as::<_, UserRow>(
-        r#"
-        SELECT id, username, email, display_name, password_hash, avatar_url, bio, is_admin, created_at, updated_at
-        FROM users
-        WHERE email = $1
-        "#,
-    )
-    .bind(email)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(row)
+    .bind(&u.id)
+    .bind(&u.username)
+    .bind(&u.email)
+    .bind(&u.display_name)
+    .bind(&u.avatar_url)
+    .bind(&u.bio)
+    .bind(&u.password_hash)
+    .bind(u.is_admin)
+    .bind(u.created_at)
+    .bind(u.updated_at)
+    .execute(pool)
+    .await
+    .map_err(AppError::from)?;
+    Ok(())
 }
 
 pub async fn find_by_username_or_email(
-    pool: &PgPool,
-    identifier: &str,
-) -> Result<Option<UserRow>> {
-    // Detect if identifier looks like an email (contains '@')
-    let row = if identifier.contains('@') {
-        // Query by email only
-        sqlx::query_as::<_, UserRow>(
-            r#"
-            SELECT id, username, email, display_name, password_hash, avatar_url, bio, is_admin, created_at, updated_at
-            FROM users
-            WHERE email = $1
-            "#,
-        )
-        .bind(identifier)
-        .fetch_optional(pool)
-        .await?
-    } else {
-        // Query by username only
-        sqlx::query_as::<_, UserRow>(
-            r#"
-            SELECT id, username, email, display_name, password_hash, avatar_url, bio, is_admin, created_at, updated_at
-            FROM users
-            WHERE username = $1
-            "#,
-        )
-        .bind(identifier)
-        .fetch_optional(pool)
-        .await?
-    };
-
-    Ok(row)
+    pool: &DbPool,
+    ident: &str,
+) -> Result<Option<UserRecord>, AppError> {
+    let row = sqlx::query(
+        "SELECT id, username, email, display_name, avatar_url, bio, password_hash, is_admin, created_at, updated_at FROM users WHERE username = $1 OR email = $1",
+    )
+    .bind(ident)
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::from)?;
+    match row {
+        Some(r) => Ok(Some(user_from_row(&r)?)),
+        None => Ok(None),
+    }
 }
 
-pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<UserRow>> {
-    let row = sqlx::query_as::<_, UserRow>(
-        r#"
-        SELECT id, username, email, display_name, password_hash, avatar_url, bio, is_admin, created_at, updated_at
-        FROM users
-        WHERE id = $1
-        "#,
+pub async fn find_by_id(pool: &DbPool, id: &str) -> Result<Option<UserRecord>, AppError> {
+    let row = sqlx::query(
+        "SELECT id, username, email, display_name, avatar_url, bio, password_hash, is_admin, created_at, updated_at FROM users WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(pool)
-    .await?;
-
-    Ok(row)
+    .await
+    .map_err(AppError::from)?;
+    match row {
+        Some(r) => Ok(Some(user_from_row(&r)?)),
+        None => Ok(None),
+    }
 }
 
-pub async fn update_profile(
-    pool: &PgPool,
-    id: Uuid,
-    display_name: Option<&str>,
-    bio: Option<&str>,
-    avatar_url: Option<&str>,
-) -> Result<Option<UserRow>> {
-    let row = sqlx::query_as::<_, UserRow>(
-        r#"
-        UPDATE users
-        SET display_name = COALESCE($2, display_name),
-            bio = COALESCE($3, bio),
-            avatar_url = COALESCE($4, avatar_url),
-            updated_at = NOW()
-        WHERE id = $1
-        RETURNING id, username, email, display_name, password_hash, avatar_url, bio, is_admin, created_at, updated_at
-        "#,
-    )
-    .bind(id)
-    .bind(display_name)
-    .bind(bio)
-    .bind(avatar_url)
-    .fetch_optional(pool)
-    .await?;
+#[cfg(feature = "postgres")]
+fn user_from_row(row: &sqlx::postgres::PgRow) -> Result<UserRecord, AppError> {
+    Ok(UserRecord {
+        id: row.try_get("id")?,
+        username: row.try_get("username")?,
+        email: row.try_get("email")?,
+        display_name: row.try_get("display_name")?,
+        avatar_url: row.try_get("avatar_url")?,
+        bio: row.try_get("bio")?,
+        password_hash: row.try_get("password_hash")?,
+        is_admin: row.try_get("is_admin")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
 
-    Ok(row)
+#[cfg(all(feature = "sqlite", not(feature = "postgres")))]
+fn user_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<UserRecord, AppError> {
+    Ok(UserRecord {
+        id: row.try_get("id")?,
+        username: row.try_get("username")?,
+        email: row.try_get("email")?,
+        display_name: row.try_get("display_name")?,
+        avatar_url: row.try_get("avatar_url")?,
+        bio: row.try_get("bio")?,
+        password_hash: row.try_get("password_hash")?,
+        is_admin: row.try_get::<i64, _>("is_admin")? != 0,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
 }

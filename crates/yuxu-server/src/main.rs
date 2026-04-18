@@ -1,49 +1,49 @@
 mod app_state;
+mod collab;
 mod config;
-pub mod db;
-pub mod middleware;
-pub mod routes;
-pub mod ws;
+mod db;
+mod error;
+mod middleware;
+mod routes;
 
 use app_state::AppState;
-use config::Config;
-use sqlx::postgres::PgPoolOptions;
-use tracing_subscriber::EnvFilter;
+use axum::{Router, routing::get};
+use std::sync::Arc;
+use tower_http::trace::TraceLayer;
+use yuxu_core::auth::JwtService;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "yuxu_server=info,tower_http=info".into()),
         )
         .init();
 
-    let config = Config::from_env()?;
-    tracing::info!("Starting YuXu DevOps server");
+    let cfg = Arc::new(config::Config::from_env());
+    let db = db::connect(&cfg.database_url).await?;
+    db::run_migrations(&db).await?;
 
-    // Ensure git root directory exists
-    std::fs::create_dir_all(&config.git_root)?;
-    tracing::info!("Git root: {}", config.git_root.display());
+    let state = AppState {
+        config: cfg.clone(),
+        db,
+        jwt: Arc::new(JwtService::new(
+            cfg.jwt_secret.as_bytes(),
+            cfg.jwt_ttl_seconds,
+        )),
+        hub: Arc::new(collab::CollabHub::new()),
+    };
 
-    // Connect to database
-    let pool = PgPoolOptions::new()
-        .max_connections(20)
-        .connect(&config.database_url)
-        .await?;
-    tracing::info!("Connected to database");
+    let app = Router::new()
+        .merge(routes::router())
+        .route("/rpc", get(collab::ws::handler))
+        .route("/health", get(|| async { "ok" }))
+        .layer(TraceLayer::new_for_http())
+        .with_state(state.clone());
 
-    // Run migrations
-    sqlx::migrate!("../../migrations").run(&pool).await?;
-    tracing::info!("Database migrations applied");
-
-    let state = AppState::new(pool, config.git_root, config.jwt_secret);
-
-    let app = routes::api_router(state);
-
-    let listener = tokio::net::TcpListener::bind(&config.listen_addr()).await?;
-    tracing::info!("Listening on {}", config.listen_addr());
-
+    tracing::info!(bind = %cfg.bind, "yuxu-server listening");
+    let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
     axum::serve(listener, app).await?;
-
     Ok(())
 }

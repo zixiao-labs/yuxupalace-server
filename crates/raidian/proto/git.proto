@@ -1,0 +1,50 @@
+syntax = "proto3";
+package raidian.collab;
+
+import "worktree.proto";
+
+message UpdateRepository {
+  uint64 project_id = 1;
+  uint64 repository_id = 2;
+  repeated string removed_statuses = 3;
+  repeated StatusEntry updated_statuses = 4;
+  optional Branch current_branch = 5;
+  optional string head_commit = 6;
+}
+
+message StatusEntry {
+  string path = 1;
+  GitEntry.Status status = 2;
+}
+
+message Branch {
+  string name = 1;
+  bool is_head = 2;
+  optional uint64 upstream_ahead = 3;
+  optional uint64 upstream_behind = 4;
+}
+
+message GitStage {
+  uint64 project_id = 1;
+  uint64 repository_id = 2;
+  repeated string paths = 3;
+}
+message GitUnstage {
+  uint64 project_id = 1;
+  uint64 repository_id = 2;
+  repeated string paths = 3;
+}
+message GitCommit {
+  uint64 project_id = 1;
+  uint64 repository_id = 2;
+  string message = 3;
+  optional string author_name = 4;
+  optional string author_email = 5;
+}
+message GitBranches {
+  uint64 project_id = 1;
+  uint64 repository_id = 2;
+}
+message GitBranchesResponse {
+  repeated Branch branches = 1;
+}
