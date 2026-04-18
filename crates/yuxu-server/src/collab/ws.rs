@@ -240,6 +240,40 @@ async fn handle_envelope(state: &AppState, conn_id: ConnectionId, env: pb::Envel
             );
         }
         Payload::UnshareProject(u) => {
+            // Authorization: only the project's host may unshare it. Without
+            // this gate any connection could tear down any project by id and
+            // spam UnshareProject at every collaborator. Check under a read
+            // guard, drop it, then remove — `host_conn_id` is set at share
+            // time and never mutates, so TOCTOU here is a non-issue.
+            let host_check = hub
+                .projects
+                .get(&u.project_id)
+                .map(|p| p.host_conn_id == conn_id);
+            match host_check {
+                None => {
+                    hub.send_to(
+                        conn_id,
+                        &envelope::error(
+                            req_id,
+                            pb::error::Code::NotFound,
+                            "project not found",
+                        ),
+                    );
+                    return;
+                }
+                Some(false) => {
+                    hub.send_to(
+                        conn_id,
+                        &envelope::error(
+                            req_id,
+                            pb::error::Code::PermissionDenied,
+                            "not the project host",
+                        ),
+                    );
+                    return;
+                }
+                Some(true) => {}
+            }
             if let Some((_, proj)) = hub.projects.remove(&u.project_id) {
                 if let Some(mut room) = hub.rooms.get_mut(&proj.room_id) {
                     room.shared_project_ids.retain(|id| *id != proj.id);
