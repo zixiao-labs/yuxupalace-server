@@ -72,9 +72,10 @@ impl CollabHub {
     }
 
     /// Remove the connection and every piece of shared state that referenced
-    /// it, then notify remaining peers (`UnshareProject` for any project this
-    /// connection hosted). Returns a summary so callers (tests, metrics) can
-    /// observe what changed.
+    /// it, then notify remaining peers: `UnshareProject` for any project this
+    /// connection hosted, and `RoomUpdated` for each room whose participant
+    /// list or shared-project list changed. Returns a summary so callers
+    /// (tests, metrics) can observe what changed.
     ///
     /// Centralising the broadcast here means every eviction path
     /// (slow-client overflow, normal disconnect, future `LeaveRoom` cleanup)
@@ -144,6 +145,30 @@ impl CollabHub {
                 pb::UnshareProject { project_id: *pid },
             ));
             self.broadcast_internal(&effects.remaining_guest_conns, &env);
+        }
+
+        // Notify remaining participants of each affected room. Read after all
+        // mutations so the payload reflects the post-disconnect membership and
+        // shared-project list. A room with no remaining participants has
+        // nobody to notify.
+        for room_id in &effects.affected_rooms {
+            let Some((targets, room_pb)) = self.rooms.get(room_id).map(|r| {
+                (
+                    r.participants.iter().map(|p| p.conn_id).collect::<Vec<_>>(),
+                    r.to_pb(),
+                )
+            }) else {
+                continue;
+            };
+            if targets.is_empty() {
+                continue;
+            }
+            let env = super::envelope::unsolicited(pb::envelope::Payload::RoomUpdated(
+                pb::RoomUpdated {
+                    room: Some(room_pb),
+                },
+            ));
+            self.broadcast_internal(&targets, &env);
         }
 
         effects

@@ -60,9 +60,10 @@ async fn run(state: AppState, socket: WebSocket) {
         }
     }
 
-    // Disconnect cleanup. `deregister` now broadcasts `UnshareProject` to
-    // every remaining guest of any project this socket hosted, so we don't
-    // need to fan out here ourselves.
+    // Disconnect cleanup. `deregister` broadcasts `UnshareProject` to every
+    // remaining guest of any project this socket hosted, and `RoomUpdated`
+    // to remaining peers of every affected room, so we don't need to fan out
+    // here ourselves.
     let _ = hub.deregister(conn_id);
     writer.abort();
 }
