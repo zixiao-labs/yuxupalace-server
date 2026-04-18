@@ -1,6 +1,6 @@
-# Zixiao Labs DevOps Service
+# Yuxupalace-Sercer
 
-Zixiao Labs DevOps Service（代号：玉虚宫）
+~~Zixiao Labs DevOps Service（代号：玉虚宫）~~ 不想重新起名了，直接叫玉虚宫吧
 
 开发者的一站式工作台，集成Git仓库，Issue，合并请求，CI/CD，基于CRDT的实时协作
 
