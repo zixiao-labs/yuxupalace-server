@@ -8,6 +8,9 @@ pub struct Config {
     pub jwt_secret: String,
     pub jwt_ttl_seconds: i64,
     pub live_kit_url: String,
+    pub github_client_id: Option<String>,
+    pub github_client_secret: Option<String>,
+    pub cors_allowed_origins: Option<String>,
 }
 
 impl Config {
@@ -65,12 +68,31 @@ impl Config {
 
         let live_kit_url = std::env::var("YUXU_LIVEKIT_URL").unwrap_or_default();
 
+        // GitHub OAuth is optional; both pieces must be present together for
+        // the /api/auth/github/callback endpoint to function.
+        let github_client_id = std::env::var("GITHUB_CLIENT_ID")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let github_client_secret = std::env::var("GITHUB_CLIENT_SECRET")
+            .ok()
+            .filter(|s| !s.is_empty());
+        if github_client_id.is_some() != github_client_secret.is_some() {
+            bail!(
+                "GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must be set together (or both unset to disable OAuth)"
+            );
+        }
+
         Ok(Self {
             bind,
             database_url,
             jwt_secret,
             jwt_ttl_seconds,
             live_kit_url,
+            github_client_id,
+            github_client_secret,
+            cors_allowed_origins: std::env::var("YUXU_CORS_ORIGINS")
+                .ok()
+                .filter(|s| !s.is_empty()),
         })
     }
 }

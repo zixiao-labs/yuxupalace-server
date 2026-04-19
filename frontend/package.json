@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "nasti dev",
-    "build": "tsc -b && nasti build",
+    "build": "tsc -b && nasti build && cp -r public/. dist/",
     "preview": "nasti preview"
   },
   "dependencies": {

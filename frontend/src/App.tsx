@@ -1,23 +1,23 @@
-import { ChenRouter, Routes, Route } from 'chen-the-dawnstreak';
-import './App.css';
+import { ChenRouter, Route, Routes } from 'chen-the-dawnstreak';
+import Layout from './pages/_layout';
+import Dashboard from './pages/index';
+import NotFound from './pages/_404';
+import ReposIndex from './pages/repos/index';
+import RepoDetail from './pages/repos/[...fullName]';
+import SettingsIndex from './pages/settings/index';
 
-function Home() {
-  return (
-    <div style={{ padding: '2rem', maxWidth: 600, margin: '2rem auto' }}>
-      <h1>欢迎使用赤刃明霄陈</h1>
-      <p>轻量级 React 元框架</p>
-    </div>
-  );
-}
-
-function App() {
+export default function App() {
   return (
     <ChenRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route element={<Layout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="repos" element={<ReposIndex />} />
+          <Route path="repos/*" element={<RepoDetail />} />
+          <Route path="settings" element={<SettingsIndex />} />
+        </Route>
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </ChenRouter>
   );
 }
-
-export default App;

@@ -1,10 +1,10 @@
 {
-  "name": "frontend",
-  "short_name": "frontend",
-  "description": "frontend - Powered by 赤刃明霄陈",
+  "name": "玉虚宫 · DevOps 主控台",
+  "short_name": "YuXu",
+  "description": "紫霄实验室 DevOps 一站式工作台",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#f7f7f9",
   "theme_color": "#6750a4",
   "icons": [
     {

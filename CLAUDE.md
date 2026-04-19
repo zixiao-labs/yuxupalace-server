@@ -30,6 +30,24 @@ cargo test -p yuxu-server --no-default-features --features sqlite   --all-target
 cargo test -p yuxu-server --no-default-features --features postgres --all-targets
 ```
 
+## Commit messages, PR titles & PR bodies — English only
+
+Write all commit messages, PR titles, and PR bodies in English. This repo has
+(or could have) non-Chinese-speaking contributors; pure-Chinese Git history is
+a blocker for them and for any external audit/review tooling.
+
+- Commit subject: imperative, ≤ 72 chars, English.
+- Commit body: wrap at ~72 chars, English. Short bullet points are fine.
+- PR title / body: English. Bullet lists, test plan, and "why" — all English.
+- Inline code identifiers stay as-is (e.g. `AppError::NotImplemented`).
+- Chinese is still fine in: in-repo docs that target Chinese users (README,
+  docs/, CLAUDE.md), UI copy, in-code comments explaining product intent.
+  It is not fine in Git metadata (commit/PR).
+
+If you catch yourself about to write a Chinese commit or PR, rewrite it before
+pushing. On feature branches it is acceptable to `git commit --amend` +
+`git push --force-with-lease` to correct; never force-push `main`.
+
 ## Feature flags: sqlite vs postgres
 
 `yuxu-server` has mutually-exclusive backend features. `sqlite` is the default, `postgres` is opt-in.

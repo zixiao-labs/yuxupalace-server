@@ -1,7 +1,22 @@
 .DS_Store
 /target
 *.env
+!.env.example
 .sqlx/
 *.swp
 *.swo
 *~
+
+# Local databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/**/*.tsbuildinfo
+frontend/.env.local
+frontend/.env.*.local
+!frontend/.env.development

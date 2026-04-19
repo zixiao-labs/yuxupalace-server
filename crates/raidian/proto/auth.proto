@@ -38,3 +38,8 @@ message UpdateProfileRequest {
   optional string bio = 2;
   optional string avatar_url = 3;
 }
+
+message GithubOauthRequest {
+  string code = 1;
+  string state = 2;
+}
