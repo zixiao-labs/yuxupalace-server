@@ -26,6 +26,10 @@ export default function RepoCreateModal({ onCreated }: Props) {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Guard against rapid double-submits: `isPending` on the button is
+    // visual only, nothing prevents a second onSubmit from firing before
+    // the first POST resolves.
+    if (loading) return;
     setError(null);
     const form = e.currentTarget;
     const fd = new FormData(form);
@@ -56,7 +60,15 @@ export default function RepoCreateModal({ onCreated }: Props) {
   }
 
   return (
-    <Modal isOpen={isOpen} onOpenChange={setIsOpen}>
+    <Modal
+      isOpen={isOpen}
+      onOpenChange={(next) => {
+        setIsOpen(next);
+        // Clear any stale error whenever the modal opens or closes so a
+        // subsequent open shows a fresh form instead of last attempt's Alert.
+        setError(null);
+      }}
+    >
       <Button onPress={() => setIsOpen(true)}>新建仓库</Button>
       <Modal.Backdrop>
         <Modal.Container>

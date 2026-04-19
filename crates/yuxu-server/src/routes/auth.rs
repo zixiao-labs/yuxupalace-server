@@ -136,20 +136,17 @@ pub async fn github_callback(
 
     let http = &state.http;
 
-    let token_resp: GithubAccessTokenResp = http
-        .post("https://github.com/login/oauth/access_token")
-        .header("Accept", "application/json")
-        .form(&[
-            ("client_id", client_id),
-            ("client_secret", client_secret),
-            ("code", req.code.as_str()),
-        ])
-        .send()
-        .await
-        .map_err(|e| AppError::Anyhow(anyhow::anyhow!("github token exchange: {e}")))?
-        .json()
-        .await
-        .map_err(|e| AppError::Anyhow(anyhow::anyhow!("decode github token: {e}")))?;
+    let token_resp: GithubAccessTokenResp = send_github_json(
+        http.post("https://github.com/login/oauth/access_token")
+            .header("Accept", "application/json")
+            .form(&[
+                ("client_id", client_id),
+                ("client_secret", client_secret),
+                ("code", req.code.as_str()),
+            ]),
+        "github token exchange",
+    )
+    .await?;
 
     if let Some(err) = token_resp.error {
         let desc = token_resp.error_description.unwrap_or_default();
@@ -160,30 +157,24 @@ pub async fn github_callback(
         .access_token
         .ok_or_else(|| AppError::Unauthorized("github oauth failed".into()))?;
 
-    let gh_user: GithubUser = http
-        .get("https://api.github.com/user")
-        .bearer_auth(&access_token)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|e| AppError::Anyhow(anyhow::anyhow!("github /user: {e}")))?
-        .json()
-        .await
-        .map_err(|e| AppError::Anyhow(anyhow::anyhow!("decode github user: {e}")))?;
+    let gh_user: GithubUser = send_github_json(
+        http.get("https://api.github.com/user")
+            .bearer_auth(&access_token)
+            .header("Accept", "application/vnd.github+json"),
+        "github /user",
+    )
+    .await?;
 
     let email = match gh_user.email.clone() {
         Some(e) if !e.is_empty() => e,
         _ => {
-            let emails: Vec<GithubEmail> = http
-                .get("https://api.github.com/user/emails")
-                .bearer_auth(&access_token)
-                .header("Accept", "application/vnd.github+json")
-                .send()
-                .await
-                .map_err(|e| AppError::Anyhow(anyhow::anyhow!("github /user/emails: {e}")))?
-                .json()
-                .await
-                .map_err(|e| AppError::Anyhow(anyhow::anyhow!("decode github emails: {e}")))?;
+            let emails: Vec<GithubEmail> = send_github_json(
+                http.get("https://api.github.com/user/emails")
+                    .bearer_auth(&access_token)
+                    .header("Accept", "application/vnd.github+json"),
+                "github /user/emails",
+            )
+            .await?;
             emails
                 .into_iter()
                 .find(|e| e.primary && e.verified)
@@ -255,19 +246,52 @@ pub async fn github_callback(
     }))
 }
 
+/// Check HTTP status before attempting JSON decode so a 4xx/5xx from GitHub
+/// surfaces as an HTTP error with the real body snippet, not as a misleading
+/// "missing field `id`" JSON decode failure.
+///
+/// Note: GitHub's OAuth token-exchange endpoint intentionally returns 200 with
+/// an `error` field in the JSON body on application-level failures, so the
+/// caller still needs to inspect that field after decode.
+async fn send_github_json<T: serde::de::DeserializeOwned>(
+    req: reqwest::RequestBuilder,
+    ctx: &'static str,
+) -> Result<T, AppError> {
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| AppError::Anyhow(anyhow::anyhow!("{ctx}: {e}")))?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let snippet: String = body.chars().take(500).collect();
+        tracing::warn!(%status, %snippet, "{} returned non-success", ctx);
+        return Err(AppError::Anyhow(anyhow::anyhow!(
+            "{ctx}: HTTP {status}: {snippet}"
+        )));
+    }
+    resp.json()
+        .await
+        .map_err(|e| AppError::Anyhow(anyhow::anyhow!("decode {ctx}: {e}")))
+}
+
 /// If `preferred` is already in use, append `-N` until a free username is found.
 async fn ensure_unique_username(
     pool: &crate::db::DbPool,
     preferred: &str,
 ) -> Result<String, AppError> {
-    let base: String = preferred
+    // GitHub caps logins at 39 chars but we also want suffix room for `-N`
+    // collision-breaking and a hard limit against pathological inputs.
+    const MAX_BASE_LEN: usize = 32;
+    let sanitized: String = preferred
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+        .take(MAX_BASE_LEN)
         .collect();
-    let base = if base.is_empty() {
+    let base = if sanitized.is_empty() {
         "gh".to_string()
     } else {
-        base
+        sanitized
     };
     if db::users::find_by_username_or_email(pool, &base)
         .await?

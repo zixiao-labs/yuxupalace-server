@@ -21,7 +21,13 @@ function isUserProfile(x: unknown): x is UserProfile {
   return (
     typeof u.id === 'string' &&
     typeof u.username === 'string' &&
-    typeof u.email === 'string'
+    typeof u.email === 'string' &&
+    typeof u.display_name === 'string' &&
+    typeof u.avatar_url === 'string' &&
+    typeof u.bio === 'string' &&
+    typeof u.is_admin === 'boolean' &&
+    typeof u.created_at === 'number' &&
+    typeof u.updated_at === 'number'
   );
 }
 
