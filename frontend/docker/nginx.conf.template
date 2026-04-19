@@ -1,0 +1,103 @@
+# Template processed by Nginx's official envsubst script on container start.
+# Only variables matching NGINX_ENVSUBST_FILTER (set to ^YUXU_.*$ in the image)
+# are substituted; Nginx's own $host, $remote_addr, etc. are left intact.
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen       8080 default_server;
+    listen       [::]:8080 default_server;
+    # Accept any hostname — required so the same image serves users hitting
+    # the container by domain, by LAN IP, or by tunnel hostname.
+    server_name  _;
+
+    root   /usr/share/nginx/html;
+    index  index.html;
+
+    # Big request bodies are rare in the console (avatar uploads are the
+    # largest); 20 MB leaves headroom for multi-file issue attachments later.
+    client_max_body_size 20m;
+
+    # After envsubst this becomes either `set $yuxu_login_url "https://...";`
+    # or `set $yuxu_login_url "";` — the request-time check below branches on it.
+    set $yuxu_login_url "${YUXU_LOGIN_URL}";
+
+    # -- Health probe for orchestrators (does NOT hit the backend) --
+    location = /healthz {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
+
+    # -- REST API proxy --
+    location /api/ {
+        proxy_pass              ${YUXU_BACKEND_URL};
+        proxy_http_version      1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_connect_timeout   5s;
+        proxy_send_timeout      60s;
+        proxy_read_timeout      60s;
+    }
+
+    # -- Collab WebSocket proxy --
+    # The backend wires /rpc in main.rs; README still references the legacy
+    # /api/v1/collab/ws path, but the live wire is /rpc.
+    location /rpc {
+        proxy_pass              ${YUXU_BACKEND_URL};
+        proxy_http_version      1.1;
+        proxy_set_header Upgrade     $http_upgrade;
+        proxy_set_header Connection  $connection_upgrade;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout      3600s;
+        proxy_send_timeout      3600s;
+    }
+
+    # -- Optional: redirect /login to an external login center --
+    # If YUXU_LOGIN_URL is set, 302 there; otherwise fall through to the SPA.
+    location = /login {
+        if ($yuxu_login_url != "") {
+            return 302 $yuxu_login_url;
+        }
+        try_files $uri /index.html;
+    }
+
+    # -- SPA shell: index.html must never be cached, so new deploys land
+    #    the moment the service worker re-checks for updates. --
+    location = /index.html {
+        add_header Cache-Control "no-store, must-revalidate" always;
+        try_files $uri =404;
+    }
+
+    # -- Static assets (JS/CSS/images/fonts): cache aggressively. Files are
+    #    fingerprinted by the bundler, so stale cache is safe. --
+    location ~* \.(?:js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|ico|webp|avif)$ {
+        expires 7d;
+        add_header Cache-Control "public, max-age=604800, immutable";
+        try_files $uri =404;
+    }
+
+    # -- SPA fallback: unknown paths render index.html so client-side routing
+    #    works for deep links (e.g. /repos/foo/bar). --
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Compress text assets to trim mobile payload.
+    gzip              on;
+    gzip_vary         on;
+    gzip_min_length   1024;
+    gzip_proxied      any;
+    gzip_comp_level   5;
+    gzip_types        text/plain text/css application/javascript application/json
+                      application/xml text/xml image/svg+xml font/woff2;
+}

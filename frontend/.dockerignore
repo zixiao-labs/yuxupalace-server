@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+.env
+.env.*
+!.env.development
+*.log
+.DS_Store
+.vscode
+.idea
+tsconfig.tsbuildinfo
+.git
+.gitignore
+Dockerfile
+.dockerignore
