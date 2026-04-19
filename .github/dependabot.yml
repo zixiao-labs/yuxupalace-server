@@ -1,0 +1,87 @@
+# Dependabot keeps our Cargo crates, npm packages, GitHub Actions, and Docker
+# base images fresh. Security advisories are handled separately and are not
+# gated by the weekly schedule below.
+#
+# Conventions:
+# - Every PR opens against `main` with an English conventional-commit subject.
+# - Labels help us route triage: `deps:rust`, `deps:frontend`, `deps:ci`, `deps:docker`.
+# - `open-pull-requests-limit` is deliberately low; bump it if the backlog grows.
+version: 2
+updates:
+  # --- Rust workspace ---
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - "deps:rust"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # --- Frontend (Yarn v1) ---
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - "deps:frontend"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    # HeroUI + Chen-the-Dawnstreak are pre-1.0; allow all updates so we see
+    # breaking changes as PRs rather than silently drifting.
+    versioning-strategy: "increase"
+
+  # --- GitHub Actions ---
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - "deps:ci"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # --- Docker base images (frontend Nginx) ---
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 3
+    labels:
+      - "deps:docker"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # --- Docker base images (backend Rust) ---
+  - package-ecosystem: "docker"
+    directory: "/crates/yuxu-server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 3
+    labels:
+      - "deps:docker"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"

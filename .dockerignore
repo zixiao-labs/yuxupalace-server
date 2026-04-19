@@ -1,0 +1,28 @@
+# Build context is the repo root (the whole Cargo workspace is needed for
+# crates/yuxu-server to compile). Excluded entries shrink the upload.
+target
+**/target
+node_modules
+**/node_modules
+frontend/dist
+frontend/dist-ssr
+*.log
+.DS_Store
+.vscode
+.idea
+.git
+.github
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+.sqlx
+# Env files (never bake secrets into images); .env.example is safe but small.
+.env
+.env.*
+!.env.example
+# Docs and editor artifacts aren't needed inside the build context.
+docs
+**/*.md
+# Downstream build outputs
+*.tsbuildinfo

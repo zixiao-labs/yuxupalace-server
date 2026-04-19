@@ -1,0 +1,194 @@
+name: Docker Publish
+
+# Builds and pushes Docker images for the yuxu-frontend (Nginx) and
+# yuxu-server (Rust) services to Docker Hub and/or GHCR.
+#
+# Gated by the `docker-publish` GitHub Environment — configure required
+# reviewers there to enforce manual approval before each publish.
+# See docs/deployment/docker-hub-setup.md for setup.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Primary image tag (in addition to sha-<commit> and branch tags)."
+        required: true
+        default: "latest"
+        type: string
+      platforms:
+        description: "Target platforms (comma-separated)."
+        required: true
+        default: "linux/amd64"
+        type: choice
+        options:
+          - "linux/amd64"
+          - "linux/amd64,linux/arm64"
+      push_to_dockerhub:
+        description: "Push to Docker Hub."
+        required: true
+        default: true
+        type: boolean
+      push_to_ghcr:
+        description: "Push to GitHub Container Registry (ghcr.io)."
+        required: true
+        default: true
+        type: boolean
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  frontend:
+    name: Build & publish yuxu-frontend
+    runs-on: ubuntu-latest
+    # `docker-publish` environment: configure required reviewers in repo
+    # Settings → Environments so the job pauses here until an admin approves.
+    environment: docker-publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: ${{ inputs.push_to_dockerhub == true || github.event_name == 'push' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        if: ${{ inputs.push_to_ghcr == true || github.event_name == 'push' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image references
+        id: refs
+        env:
+          DOCKERHUB_NS: ${{ vars.DOCKERHUB_NAMESPACE || vars.DOCKERHUB_USERNAME }}
+          PUSH_HUB: ${{ inputs.push_to_dockerhub == true || github.event_name == 'push' }}
+          PUSH_GHCR: ${{ inputs.push_to_ghcr == true || github.event_name == 'push' }}
+        run: |
+          refs=""
+          if [[ "$PUSH_HUB" == "true" && -n "$DOCKERHUB_NS" ]]; then
+            refs+="${DOCKERHUB_NS}/yuxu-frontend"$'\n'
+          fi
+          if [[ "$PUSH_GHCR" == "true" ]]; then
+            owner="${GITHUB_REPOSITORY_OWNER,,}"
+            refs+="ghcr.io/${owner}/yuxu-frontend"$'\n'
+          fi
+          echo "images<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$refs" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.refs.outputs.images }}
+          tags: |
+            type=raw,value=${{ github.event_name == 'workflow_dispatch' && inputs.tag || 'latest' }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short,prefix=sha-
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          platforms: ${{ inputs.platforms || 'linux/amd64' }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+  backend:
+    name: Build & publish yuxu-server
+    runs-on: ubuntu-latest
+    environment: docker-publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: ${{ inputs.push_to_dockerhub == true || github.event_name == 'push' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        if: ${{ inputs.push_to_ghcr == true || github.event_name == 'push' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image references
+        id: refs
+        env:
+          DOCKERHUB_NS: ${{ vars.DOCKERHUB_NAMESPACE || vars.DOCKERHUB_USERNAME }}
+          PUSH_HUB: ${{ inputs.push_to_dockerhub == true || github.event_name == 'push' }}
+          PUSH_GHCR: ${{ inputs.push_to_ghcr == true || github.event_name == 'push' }}
+        run: |
+          refs=""
+          if [[ "$PUSH_HUB" == "true" && -n "$DOCKERHUB_NS" ]]; then
+            refs+="${DOCKERHUB_NS}/yuxu-server"$'\n'
+          fi
+          if [[ "$PUSH_GHCR" == "true" ]]; then
+            owner="${GITHUB_REPOSITORY_OWNER,,}"
+            refs+="ghcr.io/${owner}/yuxu-server"$'\n'
+          fi
+          echo "images<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$refs" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.refs.outputs.images }}
+          tags: |
+            type=raw,value=${{ github.event_name == 'workflow_dispatch' && inputs.tag || 'latest' }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short,prefix=sha-
+
+      - name: Build and push backend image (sqlite)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./crates/yuxu-server/Dockerfile
+          platforms: ${{ inputs.platforms || 'linux/amd64' }}
+          push: true
+          build-args: |
+            FEATURES=sqlite
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=backend-sqlite
+          cache-to: type=gha,scope=backend-sqlite,mode=max
