@@ -4,7 +4,7 @@
 
 开发者的一站式工作台，集成Git仓库，Issue，合并请求，CI/CD，基于CRDT的实时协作
 
-支持[Logos](https://github.com/zixiao-labs/logos)、~~[Zed](https://github.com/amiya167/zed)~~ 由于官方暂时Out Of Scope，Zed支持将通过扩展程序提供、CLI客户端，并会推出手机客户端
+支持[Logos](https://github.com/zixiao-labs/logos)、~~[Zed](https://github.com/amiya167/zed)~~ 由于官方暂时Out Of Scope，~~Zed支持将通过扩展程序提供~~ 等不到视觉API了，还是用Zed同款的GPUI手搓一个GUI Git Client吧、CLI客户端，并会推出手机客户端
 
 ## 技术栈
 
@@ -79,12 +79,20 @@ cargo run -p yuxu-cli -- repo list
 
 `raidian` crate 包含所有消息类型的 `.proto` 定义，通过 `prost` 编译，并附加 `serde` 派生。
 
-可通过 git 依赖使用：
+现已上架crates.io
+
+```bash
+cargo add raidian
+```
+
+
+或者通过 git 依赖使用：
 
 ```toml
 [dependencies]
-raidian = { git = "https://github.com/zixiao-labs/devops-service", package = "raidian" }
+raidian = { git = "https://github.com/zixiao-labs/yuxupalace-server", package = "raidian" }
 ```
+
 
 ## 实时协作协议
 
