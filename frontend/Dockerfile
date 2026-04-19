@@ -27,7 +27,7 @@ ENV VITE_LOGIN_URL="/login"
 RUN yarn build
 
 # ---- Stage 2: runtime (Nginx + envsubst) ----
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.29-alpine AS runtime
 
 # wget is in busybox; bash is needed for our entrypoint's validation.
 RUN apk add --no-cache bash
