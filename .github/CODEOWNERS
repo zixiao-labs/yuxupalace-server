@@ -1,0 +1,11 @@
+# This is a comment
+# Each line is a file pattern followed by one or more owners
+# Default owners for everything in the repo
+* @Amiya167 @HwlloChen
+# Specific owners for frontend files
+*.ts @HwlloChen @Amiya167 @zhangqiling-1103
+*.tsx @HwlloChen @Amiya167 @zhangqiling-1103 
+# Owners for files in the docs directory
+docs/* @Amiya167
+# Owners for backend
+*.rs @Amiya167 @zhangqiling-1103
