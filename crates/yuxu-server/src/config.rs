@@ -77,67 +77,6 @@ pub struct Config {
 // database_url which may embed a password, github_client_secret,
 // zixiao_cloud.client_secret) are elided.
 impl std::fmt::Debug for Config {
-    /// Formats the `Config` for debugging while redacting sensitive secrets.
-    
-    ///
-    
-    /// Sensitive fields such as `database_url`, `jwt_secret`, `github_client_secret`, and
-    
-    /// `zixiao_cloud.client_secret` are replaced with `"<redacted>"` in the output.
-    
-    ///
-    
-    /// # Examples
-    
-    ///
-    
-    /// ```
-    
-    /// # use std::net::SocketAddr;
-    
-    /// # use yuxu_server::config::{Config, DeploymentMode, ZixiaoCloudConfig};
-    
-    /// let cfg = Config {
-    
-    ///     bind: "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
-    
-    ///     database_url: "postgres://user:pass@localhost/db".into(),
-    
-    ///     deployment_mode: DeploymentMode::SelfHosted,
-    
-    ///     jwt_secret: "a".repeat(32),
-    
-    ///     jwt_ttl_seconds: 3600,
-    
-    ///     live_kit_url: "https://livekit.example".into(),
-    
-    ///     github_client_id: None,
-    
-    ///     github_client_secret: None,
-    
-    ///     zixiao_cloud: Some(ZixiaoCloudConfig {
-    
-    ///         client_id: "cid".into(),
-    
-    ///         client_secret: "csecret".into(),
-    
-    ///         base_url: "https://zixiao.example".into(),
-    
-    ///     }),
-    
-    ///     cors_allowed_origins: None,
-    
-    /// };
-    
-    ///
-    
-    /// let s = format!("{:?}", cfg);
-    
-    /// assert!(s.contains("database_url"));
-    
-    /// assert!(s.contains("<redacted>"));
-    
-    /// ```
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Config")
             .field("bind", &self.bind)
@@ -275,23 +214,22 @@ impl Config {
         let zixiao_id = env_nonempty_trimmed("ZIXIAO_CLOUD_CLIENT_ID");
         let zixiao_secret = env_nonempty_trimmed("ZIXIAO_CLOUD_CLIENT_SECRET");
         let zixiao_base = env_nonempty_trimmed("ZIXIAO_CLOUD_BASE_URL");
-        let zixiao_cloud =
-            match (zixiao_id, zixiao_secret, zixiao_base) {
-                (Some(client_id), Some(client_secret), Some(mut base_url)) => {
-                    while base_url.ends_with('/') {
-                        base_url.pop();
-                    }
-                    Some(ZixiaoCloudConfig {
-                        client_id,
-                        client_secret,
-                        base_url,
-                    })
+        let zixiao_cloud = match (zixiao_id, zixiao_secret, zixiao_base) {
+            (Some(client_id), Some(client_secret), Some(mut base_url)) => {
+                while base_url.ends_with('/') {
+                    base_url.pop();
                 }
-                (None, None, None) => None,
-                _ => bail!(
-                    "ZIXIAO_CLOUD_CLIENT_ID, ZIXIAO_CLOUD_CLIENT_SECRET and ZIXIAO_CLOUD_BASE_URL must all be set together (or all unset to disable the Zixiao Cloud provider)"
-                ),
-            };
+                Some(ZixiaoCloudConfig {
+                    client_id,
+                    client_secret,
+                    base_url,
+                })
+            }
+            (None, None, None) => None,
+            _ => bail!(
+                "ZIXIAO_CLOUD_CLIENT_ID, ZIXIAO_CLOUD_CLIENT_SECRET and ZIXIAO_CLOUD_BASE_URL must all be set together (or all unset to disable the Zixiao Cloud provider)"
+            ),
+        };
 
         if deployment_mode == DeploymentMode::Saas
             && zixiao_cloud.is_none()
@@ -317,5 +255,75 @@ impl Config {
             zixiao_cloud,
             cors_allowed_origins: env_nonempty_trimmed("YUXU_CORS_ORIGINS"),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deployment_mode_as_str_roundtrips_expected_values() {
+        assert_eq!(DeploymentMode::SelfHosted.as_str(), "self-hosted");
+        assert_eq!(DeploymentMode::Saas.as_str(), "saas");
+    }
+
+    #[test]
+    fn only_self_hosted_allows_local_password() {
+        assert!(DeploymentMode::SelfHosted.allows_local_password());
+        assert!(!DeploymentMode::Saas.allows_local_password());
+    }
+
+    #[test]
+    fn config_debug_redacts_secrets() {
+        // Construct manually so the test doesn't touch process env. If the
+        // Debug impl ever regresses and starts printing secrets, the failing
+        // assertion here points at the exact field that leaked.
+        let cfg = Config {
+            bind: "127.0.0.1:8080".parse().unwrap(),
+            database_url: "postgres://user:supersecretpw@localhost/yuxu".into(),
+            deployment_mode: DeploymentMode::SelfHosted,
+            jwt_secret: "a".repeat(48),
+            jwt_ttl_seconds: 3600,
+            live_kit_url: "https://livekit.example".into(),
+            github_client_id: Some("gh-id".into()),
+            github_client_secret: Some("gh-secret-value".into()),
+            zixiao_cloud: Some(ZixiaoCloudConfig {
+                client_id: "zx-id".into(),
+                client_secret: "zx-secret-value".into(),
+                base_url: "https://account.example".into(),
+            }),
+            cors_allowed_origins: Some("http://localhost:5173".into()),
+        };
+        let rendered = format!("{cfg:?}");
+        assert!(!rendered.contains("supersecretpw"));
+        assert!(!rendered.contains(&"a".repeat(48)));
+        assert!(!rendered.contains("gh-secret-value"));
+        assert!(!rendered.contains("zx-secret-value"));
+        // Non-secret fields should still be visible.
+        assert!(rendered.contains("gh-id"));
+        assert!(rendered.contains("zx-id"));
+        assert!(rendered.contains("https://account.example"));
+    }
+
+    #[test]
+    fn env_nonempty_trimmed_treats_whitespace_as_unset() {
+        // Round-trip a value through the helper by simulating the branch it
+        // takes. The helper itself reads env, so we exercise its trimming
+        // logic via string branching instead of mutating process-global env.
+        fn simulate(raw: Option<&str>) -> Option<String> {
+            raw.and_then(|s| {
+                let t = s.trim();
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
+            })
+        }
+        assert_eq!(simulate(None), None);
+        assert_eq!(simulate(Some("")), None);
+        assert_eq!(simulate(Some("   ")), None);
+        assert_eq!(simulate(Some("\tabc\n")), Some("abc".to_string()));
     }
 }

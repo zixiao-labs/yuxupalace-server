@@ -14,10 +14,12 @@ pub mod repos;
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/auth/config", get(auth::config))
         .route("/api/auth/register", post(auth::register))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/me", get(auth::me))
         .route("/api/auth/github/callback", post(auth::github_callback))
+        .route("/api/auth/zixiao/callback", post(auth::zixiao_callback))
         .route("/api/repos", get(repos::list).post(repos::create))
         .route("/api/repos/{full_name}", get(repos::get_by_name))
         .route(

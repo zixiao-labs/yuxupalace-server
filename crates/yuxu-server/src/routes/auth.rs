@@ -3,6 +3,7 @@ use axum::{Json, extract::State};
 use base64::{Engine as _, engine::general_purpose};
 use raidian::{AuthResponse, GithubOauthRequest, LoginRequest, RegisterRequest, UserProfile};
 use rand::RngCore;
+use serde::{Deserialize, Serialize};
 use yuxu_core::auth::{hash_password, verify_password};
 
 fn profile_from_record(u: &db::users::UserRecord) -> UserProfile {
@@ -19,10 +20,54 @@ fn profile_from_record(u: &db::users::UserRecord) -> UserProfile {
     }
 }
 
+#[derive(Serialize)]
+pub struct AuthConfigResponse {
+    pub deployment_mode: &'static str,
+    pub providers: AuthProviders,
+}
+
+#[derive(Serialize)]
+pub struct AuthProviders {
+    pub local: bool,
+    pub github: bool,
+    pub zixiao_cloud: Option<ZixiaoCloudClientConfig>,
+}
+
+/// Public OAuth client parameters the browser needs to build the authorize
+/// redirect. `client_secret` is deliberately omitted.
+#[derive(Serialize)]
+pub struct ZixiaoCloudClientConfig {
+    pub client_id: String,
+    pub base_url: String,
+}
+
+/// Expose deployment mode + enabled auth providers so the frontend can render
+/// the correct login surface without having to duplicate the env-var rules.
+/// Reachable without authentication — it intentionally leaks no secrets.
+pub async fn config(State(state): State<AppState>) -> Json<AuthConfigResponse> {
+    let cfg = &state.config;
+    Json(AuthConfigResponse {
+        deployment_mode: cfg.deployment_mode.as_str(),
+        providers: AuthProviders {
+            local: cfg.deployment_mode.allows_local_password(),
+            github: cfg.github_client_id.is_some(),
+            zixiao_cloud: cfg.zixiao_cloud.as_ref().map(|z| ZixiaoCloudClientConfig {
+                client_id: z.client_id.clone(),
+                base_url: z.base_url.clone(),
+            }),
+        },
+    })
+}
+
 pub async fn register(
     State(state): State<AppState>,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, AppError> {
+    if !state.config.deployment_mode.allows_local_password() {
+        return Err(AppError::Forbidden(
+            "local account registration is disabled in SaaS mode".into(),
+        ));
+    }
     if req.username.trim().is_empty() || req.password.len() < 8 {
         return Err(AppError::BadRequest("invalid credentials".into()));
     }
@@ -52,6 +97,7 @@ pub async fn register(
         created_at: now,
         updated_at: now,
         github_id: None,
+        zixiao_cloud_id: None,
     };
     db::users::insert(&state.db, &rec).await?;
     let token = state.jwt.issue(&rec.id, &rec.username, rec.is_admin)?;
@@ -65,6 +111,11 @@ pub async fn login(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, AppError> {
+    if !state.config.deployment_mode.allows_local_password() {
+        return Err(AppError::Forbidden(
+            "local password login is disabled in SaaS mode".into(),
+        ));
+    }
     let user = db::users::find_by_username_or_email(&state.db, &req.username_or_email)
         .await?
         .ok_or_else(|| AppError::Unauthorized("invalid credentials".into()))?;
@@ -235,6 +286,7 @@ pub async fn github_callback(
         created_at: now,
         updated_at: now,
         github_id: Some(github_id.clone()),
+        zixiao_cloud_id: None,
     };
     if let Err(err) = db::users::insert(&state.db, &rec).await {
         // If a concurrent callback for the same GitHub id raced us past
@@ -341,4 +393,187 @@ async fn ensure_unique_username(
     Err(AppError::Conflict(
         "could not pick a unique username".into(),
     ))
+}
+
+#[derive(Deserialize)]
+pub struct ZixiaoOauthRequest {
+    pub code: String,
+    #[allow(dead_code)]
+    pub state: Option<String>,
+    /// Frontend-supplied redirect_uri that was used when starting the
+    /// authorization-code flow. Forwarded to the token endpoint verbatim —
+    /// the provider enforces an exact match.
+    pub redirect_uri: String,
+}
+
+#[derive(Deserialize)]
+struct ZixiaoTokenResp {
+    access_token: Option<String>,
+    error: Option<String>,
+    error_description: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ZixiaoUserInfo {
+    /// Stable subject identifier; required.
+    sub: String,
+    username: Option<String>,
+    email: Option<String>,
+    name: Option<String>,
+    avatar_url: Option<String>,
+    bio: Option<String>,
+}
+
+/// OAuth 2.0 authorization-code callback for the Zixiao Labs Cloud Account
+/// provider. The browser runs the authorize redirect itself using the
+/// `base_url` + `client_id` it discovered from `/api/auth/config`, then POSTs
+/// the returned code here. We exchange the code for an access token, fetch
+/// the userinfo document, and upsert a local account keyed on `sub`.
+pub async fn zixiao_callback(
+    State(state): State<AppState>,
+    Json(req): Json<ZixiaoOauthRequest>,
+) -> Result<Json<AuthResponse>, AppError> {
+    let zx = state
+        .config
+        .zixiao_cloud
+        .as_ref()
+        .ok_or_else(|| AppError::BadRequest("zixiao cloud oauth not configured".into()))?;
+    if req.code.trim().is_empty() {
+        return Err(AppError::BadRequest("missing code".into()));
+    }
+    if req.redirect_uri.trim().is_empty() {
+        return Err(AppError::BadRequest("missing redirect_uri".into()));
+    }
+
+    let http = &state.http;
+
+    let token_url = format!("{}/oauth/token", zx.base_url);
+    let token_resp: ZixiaoTokenResp = send_oauth_json(
+        http.post(&token_url)
+            .header("Accept", "application/json")
+            .basic_auth(&zx.client_id, Some(&zx.client_secret))
+            .form(&[
+                ("grant_type", "authorization_code"),
+                ("code", req.code.as_str()),
+                ("redirect_uri", req.redirect_uri.as_str()),
+                ("client_id", zx.client_id.as_str()),
+            ]),
+        "zixiao token exchange",
+    )
+    .await?;
+
+    if let Some(err) = token_resp.error {
+        let desc = token_resp.error_description.unwrap_or_default();
+        tracing::warn!(%err, %desc, "zixiao returned oauth error");
+        return Err(AppError::Unauthorized("zixiao oauth failed".into()));
+    }
+    let access_token = token_resp
+        .access_token
+        .ok_or_else(|| AppError::Unauthorized("zixiao oauth failed".into()))?;
+
+    let userinfo: ZixiaoUserInfo = send_oauth_json(
+        http.get(format!("{}/oauth/userinfo", zx.base_url))
+            .bearer_auth(&access_token)
+            .header("Accept", "application/json"),
+        "zixiao /oauth/userinfo",
+    )
+    .await?;
+
+    let sub = userinfo.sub.trim().to_string();
+    if sub.is_empty() {
+        return Err(AppError::Unauthorized(
+            "zixiao userinfo missing subject".into(),
+        ));
+    }
+
+    if let Some(existing) = db::users::find_by_zixiao_cloud_id(&state.db, &sub).await? {
+        let token = state
+            .jwt
+            .issue(&existing.id, &existing.username, existing.is_admin)?;
+        return Ok(Json(AuthResponse {
+            token,
+            user: Some(profile_from_record(&existing)),
+        }));
+    }
+
+    // Don't auto-link an existing local account just because emails match —
+    // same reasoning as in `github_callback`: the provider has only proven the
+    // user controls *that provider's* view of the email, not the local
+    // account with the same address.
+    let email = userinfo.email.unwrap_or_default();
+    if !email.is_empty()
+        && db::users::find_by_username_or_email(&state.db, &email)
+            .await?
+            .is_some()
+    {
+        return Err(AppError::Conflict(
+            "an account with this email already exists; sign in and link the cloud account from settings"
+                .into(),
+        ));
+    }
+
+    let preferred_username = userinfo.username.clone().unwrap_or_else(|| sub.clone());
+    let username = ensure_unique_username(&state.db, &preferred_username).await?;
+    let now = chrono::Utc::now().timestamp();
+    let mut random = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut random);
+    let placeholder_pw = general_purpose::STANDARD_NO_PAD.encode(random);
+
+    let rec = db::users::UserRecord {
+        id: uuid::Uuid::new_v4().to_string(),
+        username,
+        email,
+        display_name: userinfo.name.unwrap_or_default(),
+        avatar_url: userinfo.avatar_url.unwrap_or_default(),
+        bio: userinfo.bio.unwrap_or_default(),
+        password_hash: hash_password(&placeholder_pw)?,
+        is_admin: false,
+        created_at: now,
+        updated_at: now,
+        github_id: None,
+        zixiao_cloud_id: Some(sub.clone()),
+    };
+    if let Err(err) = db::users::insert(&state.db, &rec).await {
+        if matches!(&err, AppError::Sqlx(e) if is_unique_violation_on(e, "zixiao_cloud_id"))
+            && let Some(existing) = db::users::find_by_zixiao_cloud_id(&state.db, &sub).await?
+        {
+            let token = state
+                .jwt
+                .issue(&existing.id, &existing.username, existing.is_admin)?;
+            return Ok(Json(AuthResponse {
+                token,
+                user: Some(profile_from_record(&existing)),
+            }));
+        }
+        return Err(err);
+    }
+    let token = state.jwt.issue(&rec.id, &rec.username, rec.is_admin)?;
+    Ok(Json(AuthResponse {
+        token,
+        user: Some(profile_from_record(&rec)),
+    }))
+}
+
+/// Same non-2xx-to-error pattern as `send_github_json`, renamed so its reuse
+/// across providers doesn't read as a GitHub-specific helper.
+async fn send_oauth_json<T: serde::de::DeserializeOwned>(
+    req: reqwest::RequestBuilder,
+    ctx: &'static str,
+) -> Result<T, AppError> {
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| AppError::Anyhow(anyhow::anyhow!("{ctx}: {e}")))?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let snippet: String = body.chars().take(500).collect();
+        tracing::warn!(%status, %snippet, "{} returned non-success", ctx);
+        return Err(AppError::Anyhow(anyhow::anyhow!(
+            "{ctx}: HTTP {status}: {snippet}"
+        )));
+    }
+    resp.json()
+        .await
+        .map_err(|e| AppError::Anyhow(anyhow::anyhow!("decode {ctx}: {e}")))
 }
