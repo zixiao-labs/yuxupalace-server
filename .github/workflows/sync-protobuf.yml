@@ -23,7 +23,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Fetch full history so we can diff correctly if needed.
           fetch-depth: 0
