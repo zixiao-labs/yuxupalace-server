@@ -554,8 +554,13 @@ pub async fn zixiao_callback(
     }))
 }
 
-/// Same non-2xx-to-error pattern as `send_github_json`, renamed so its reuse
-/// across providers doesn't read as a GitHub-specific helper.
+/// Like `send_github_json` but tolerant of standards-compliant OAuth 2.0
+/// error responses. RFC 6749 §5.2 mandates that token-endpoint failures come
+/// back as HTTP 4xx with a JSON body such as `{"error": "invalid_grant"}`;
+/// callers (e.g. `zixiao_callback`) rely on decoding that body into a struct
+/// with optional `error`/`error_description` fields to surface the real
+/// reason. Only if the body isn't the expected shape do we fall through to a
+/// generic transport-style AppError.
 async fn send_oauth_json<T: serde::de::DeserializeOwned>(
     req: reqwest::RequestBuilder,
     ctx: &'static str,
@@ -567,11 +572,22 @@ async fn send_oauth_json<T: serde::de::DeserializeOwned>(
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
-        let snippet: String = body.chars().take(500).collect();
-        tracing::warn!(%status, %snippet, "{} returned non-success", ctx);
-        return Err(AppError::Anyhow(anyhow::anyhow!(
-            "{ctx}: HTTP {status}: {snippet}"
-        )));
+        match serde_json::from_str::<T>(&body) {
+            Ok(decoded) => return Ok(decoded),
+            Err(decode_err) => {
+                let snippet: String = body.chars().take(500).collect();
+                tracing::warn!(
+                    %status,
+                    %snippet,
+                    decode_err = %decode_err,
+                    "{} returned non-success and body did not decode",
+                    ctx,
+                );
+                return Err(AppError::Anyhow(anyhow::anyhow!(
+                    "{ctx}: HTTP {status}: {snippet}"
+                )));
+            }
+        }
     }
     resp.json()
         .await
