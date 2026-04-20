@@ -35,6 +35,28 @@ export interface GithubOauthRequest {
   state: string;
 }
 
+export interface ZixiaoOauthRequest {
+  code: string;
+  state: string;
+  redirect_uri: string;
+}
+
+export interface ZixiaoCloudClientConfig {
+  client_id: string;
+  base_url: string;
+}
+
+export interface AuthProviders {
+  local: boolean;
+  github: boolean;
+  zixiao_cloud: ZixiaoCloudClientConfig | null;
+}
+
+export interface AuthConfigResponse {
+  deployment_mode: 'self-hosted' | 'saas';
+  providers: AuthProviders;
+}
+
 export interface Repository {
   id: string;
   owner_id: string;

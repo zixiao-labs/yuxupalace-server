@@ -3,7 +3,11 @@ import type { UserProfile } from './types';
 const TOKEN_KEY = 'yuxu_token';
 const USER_KEY = 'yuxu_user';
 
-export const LOGIN_URL = import.meta.env.VITE_LOGIN_URL || 'http://localhost:5173/login';
+// Internal login route. The old default pointed at uni-login's frontend on
+// 5173, which doesn't exist in SaaS mode (the console hosts its own login
+// surface). Operators can still override with VITE_LOGIN_URL if they have
+// reason to redirect to a separate SSO frontend.
+export const LOGIN_URL = import.meta.env.VITE_LOGIN_URL || '/login';
 
 export interface Session {
   token: string;
