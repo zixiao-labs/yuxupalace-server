@@ -111,3 +111,8 @@ WebSocket 端点：`/api/v1/collab/ws`
 
 详细集成说明见 [docs/logos-integration.md](docs/logos-integration.md)。
 
+## 关于名字
+
+玉虚宫，元始天尊的道场（Claude帮忙起的~~文化输出~~，其实一开始就是~~一个能在OpenWRT路由器上跑的GitLab~~）
+
+这并不是像Github那样冰冷的工具，这是一个开发者的一站式工作台+欢迎所有人的社区
