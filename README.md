@@ -1,6 +1,8 @@
-# Yuxupalace-Server
+# Wuling
 
-~~Zixiao Labs DevOps Service（代号：玉虚宫）~~ 不想重新起名了，直接叫玉虚宫吧
+~~Zixiao Labs DevOps Service（代号：玉虚宫）~~ ~~不想重新起名了，直接叫玉虚宫吧~~
+
+还是叫武陵吧，这是最后一次改名
 
 开发者的一站式工作台，集成Git仓库，Issue，合并请求，CI/CD，基于CRDT的实时协作
 
@@ -113,6 +115,4 @@ WebSocket 端点：`/api/v1/collab/ws`
 
 ## 关于名字
 
-玉虚宫，元始天尊的道场（Claude帮忙起的~~文化输出~~，其实一开始就是~~一个能在OpenWRT路由器上跑的GitLab~~）
-
-这并不是像Github那样冰冷的工具，这是一个开发者的一站式工作台+欢迎所有人的社区
+好吧这次纯属是明日方舟终末地玩多了改个名字吧🙃
